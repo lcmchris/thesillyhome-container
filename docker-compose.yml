@@ -1,0 +1,13 @@
+volumes:
+  thesillyhome:
+
+
+services:
+  thesillyhome:
+    container_name: thesillyhome
+    image: lcmchris1/thesillyhome-container
+    # restart: unless-stopped
+    volumes:
+      - thesillyhome:/thesillyhome
+    stdin_open: true
+    tty: true

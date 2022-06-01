@@ -1,0 +1,10 @@
+appdaemon:
+  latitude: 52.379189
+  longitude: 4.899431
+  elevation: 2
+  time_zone: Europe/London
+  plugins:
+    HASS:
+      type: hass
+      ha_url: http://supervisor/core
+      token: $SUPERVISOR_TOKEN

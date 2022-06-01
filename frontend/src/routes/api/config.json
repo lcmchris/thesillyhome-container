@@ -1,0 +1,7 @@
+
+var fs = require('fs')
+
+var configyaml = fs.readFileSync('config.yaml', 'utf8')
+console.log(configyaml);
+
+console.log('Accept Or Refuse');

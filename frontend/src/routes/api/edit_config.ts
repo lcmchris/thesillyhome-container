@@ -1,6 +1,6 @@
 import { readFile } from 'fs'
 
-export function get(request) {
+export function get() {
 
     readFile('../.storage/config.yaml', 'utf8', (err, data) => {
         if (err) {
@@ -9,12 +9,6 @@ export function get(request) {
         }
         console.log(data);
     });
-}
-
-export function post(request) {
-    return {
-        body: { bye: 'world', request: request.body }
-    }
 }
 
 

@@ -14,6 +14,8 @@
 	import Tab, { Label } from '@smui/tab';
 	import Textfield from '@smui/textfield';
 	import HelperText from '@smui/textfield/helper-text';
+	import Header from '$lib/Header.svelte';
+
 	let active = 'Config';
 	let yaml = '';
 	let actuators_id = '';
@@ -26,9 +28,22 @@
 	let ha_url = '';
 	let ha_token = '';
 	// export let data = '';
-
-	import TipTap from '$lib/TipTap.svelte';
+	export const ssr = false;
+	import * as fs from 'fs';
+	const config_file = fs.readFileSync('../.storage/config.yaml', 'utf8');
+	import { onMount } from 'svelte';
+	import { browser } from '$app/env';
+	let CodeEditor;
+	onMount(async () => {
+		const module = await import('$lib/CodeEditor.svelte');
+		CodeEditor = module.default;
+	});
 </script>
+
+<Header />
+<!-- <pre>{config_file}</pre> -->
+<!-- <svelte:component this={CodeEditor}>{config_file}</svelte:component> -->
+<div use:CodeEditor.codedit={{ config_file, $$restProps }} />
 
 <Tabbar tabs={['Config', 'Dashboard', 'About Us']} let:tab bind:active>
 	<Tab {tab}>
@@ -37,7 +52,7 @@
 </Tabbar>
 {#if active === 'Config'}
 	<pre>Yaml</pre>
-	<TipTap />
+
 	<pre>ML settings</pre>
 	<div>
 		<Textfield bind:value={actuators_id} label="actuators_id">

@@ -16,6 +16,7 @@
 		"smui-theme-dark": "smui-theme compile static/smui-dark.css -i src/theme/dark"
 	},
 	"devDependencies": {
+		"@material/textfield": "^14.0.0",
 		"@material/typography": "^13.0.0",
 		"@playwright/test": "^1.21.0",
 		"@smui/button": "^6.0.0-beta.16",
@@ -30,6 +31,7 @@
 		"eslint": "^8.12.0",
 		"eslint-config-prettier": "^8.3.0",
 		"eslint-plugin-svelte3": "^4.0.0",
+		"json-stringify": "^1.0.0",
 		"prettier": "^2.5.1",
 		"prettier-plugin-svelte": "^2.5.0",
 		"smui-theme": "^6.0.0-beta.16",
@@ -37,11 +39,12 @@
 		"svelte-check": "^2.2.6",
 		"svelte-preprocess": "^4.10.1",
 		"tslib": "^2.3.1",
-		"typescript": "~4.6.2"
+		"typescript": "~4.6.2",
+		"window": "^4.2.7"
 	},
 	"type": "module",
 	"dependencies": {
-		"@material/textfield": "^14.0.0",
-		"json-stringify": "^1.0.0"
+		"@tiptap/core": "^2.0.0-beta.176",
+		"@tiptap/starter-kit": "^2.0.0-beta.185"
 	}
 }

@@ -1,13 +1,3 @@
-<!-- <script context="module">
-	// export const load = async ({ fetch }) => {
-	// 	const res = await fetch('/api/edit_config');
-	// 	const data = await res;
-	// 	console.log({ data });
-	// 	return {
-	// 		props: { data }
-	// 	};
-	// };
-</script> -->
 <script>
 	import Button from '@smui/button';
 	import Tabbar from '@smui/tab-bar';
@@ -25,8 +15,6 @@
 	let db_database = '';
 	let ha_url = '';
 	let ha_token = '';
-	// export let data = '';
-
 	import TipTap from '$lib/TipTap.svelte';
 </script>
 
@@ -38,7 +26,8 @@
 {#if active === 'Config'}
 	<pre>Yaml</pre>
 	<TipTap />
-	<pre>ML settings</pre>
+
+	<!-- <pre>ML settings</pre>
 	<div>
 		<Textfield bind:value={actuators_id} label="actuators_id">
 			<HelperText slot="helper">List of actuators_id (comma delimited)</HelperText>
@@ -66,7 +55,7 @@
 			<HelperText slot="helper">Homeassistant token created from profile</HelperText>
 		</Textfield>
 	</div>
-	<div><Button action="/contact" method="POST">Save</Button></div>
+	<div><Button action="/contact" method="POST">Save</Button></div> -->
 {:else}
 	<div />
 {/if}

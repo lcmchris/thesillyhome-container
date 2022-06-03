@@ -2,19 +2,19 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { Editor } from '@tiptap/core';
 	import StarterKit from '@tiptap/starter-kit';
-	import * as fs from 'fs';
-	// const config_file = fs.readFileSync('../.storage/config.yaml', 'utf8');
 
 	let element;
 	let editor;
 
-	onMount(() => {
+	onMount(async () => {
+		const res = await fetch('api/edit_config');
+		const file_data = await res.text();
+
 		editor = new Editor({
 			element: element,
 			extensions: [StarterKit],
-			content: 'config_file',
+			content: file_data,
 			onTransaction: () => {
-				// force re-render so `editor.isActive` works as expected
 				editor = editor;
 			}
 		});
@@ -27,7 +27,11 @@
 	});
 </script>
 
-<div bind:this={element} />
+{#if editor}
+	<button onclick="editor.chain().focus().toggleBold().run()"> Save </button>
+{/if}
+
+<div class="wrapper" bind:this={element} />
 
 <style>
 	button.active {

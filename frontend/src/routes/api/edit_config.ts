@@ -1,38 +1,31 @@
-import { readFile, readFileSync, writeFile } from 'fs'
+// import { readFileSync, writeFileSync } from 'fs'
 
+const config_file_path = '.storage/config.yaml'
 
 export function get(request) {
-    const data = readFileSync('.storage/config.yaml', 'utf-8')
+    const data = readFileSync(config_file_path, 'utf-8')
     return {
         body: data
     }
-    // readFile('.storage/config.yaml', 'utf8', (err, data) => {
-    //     if (err) {
-    //         console.error('oh no :(')
-    //         console.error(err);
-    //         return;
-    //     }
-    //     console.log(data);
-    //     return { data }
-    // });
 }
 
 
-// export function post(request) {
-//     writeFile('../.storage/config.yaml', request, (err) => {
-//         if (err) {
-//             console.error(err);
-//             return;
-//         }
-//         console.log(request);
+// export async function post(request) {
+//     console.log(request)
+//     const body = JSON.parse(request)
+//     console.log(body)
 
-//     });
+//     writeFileSync(config_file_path, body)
+//     console.log('Post success!');
+
+//     return;
 // }
 
-
-
-// export function get(request) {
-//     return {
-//         body: { hello: "world" }
-//     }
-// }
+export async function post({ request }) {
+    // console.log(request)
+    // const content = JSON.stringify(request)
+    // console.log('log of request : ', data);
+    const content = await request.json()
+    writeFileSync(config_file_path, content)
+    return;
+}

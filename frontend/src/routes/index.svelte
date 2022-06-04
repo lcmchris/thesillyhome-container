@@ -4,7 +4,7 @@
 	import Tab, { Label } from '@smui/tab';
 	import Textfield from '@smui/textfield';
 	import HelperText from '@smui/textfield/helper-text';
-	let active = 'Config';
+	let active = 'Home';
 	let yaml = '';
 	let actuators_id = '';
 	let sensors_id = '';
@@ -18,7 +18,7 @@
 	import TipTap from '$lib/TipTap.svelte';
 </script>
 
-<Tabbar tabs={['Config', 'Dashboard', 'About Us']} let:tab bind:active>
+<Tabbar tabs={['Home', 'Config', 'Dashboard', 'About Us']} let:tab bind:active>
 	<Tab {tab}>
 		<Label>{tab}</Label>
 	</Tab>
@@ -56,6 +56,8 @@
 		</Textfield>
 	</div>
 	<div><Button action="/contact" method="POST">Save</Button></div> -->
+{:else if active === 'Home'}
+	<Button on:click{spawn}>Run</Button>
 {:else}
 	<div />
 {/if}

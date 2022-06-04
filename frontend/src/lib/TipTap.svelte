@@ -7,7 +7,7 @@
 	let editor;
 
 	onMount(async () => {
-		const res = await fetch('api/edit_config');
+		const res = await fetch('/api/edit_config');
 		const file_data = await res.text();
 
 		editor = new Editor({
@@ -25,10 +25,21 @@
 			editor.destroy();
 		}
 	});
+
+	const onSubmit = async () => {
+		const content = editor.getHTML();
+		await fetch('/api/edit_config', {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify(content)
+		});
+	};
 </script>
 
 {#if editor}
-	<button onclick="editor.chain().focus().toggleBold().run()"> Save </button>
+	<button on:click={() => onSubmit()}> Save </button>
 {/if}
 
 <div class="wrapper" bind:this={element} />

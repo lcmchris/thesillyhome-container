@@ -13,9 +13,21 @@ RUN \
     mariadb-connector-c-dev \
     && pip3 install thesillyhome==0.2.4 \
     && pip3 install appdaemon==4.2.1 \
-    && apk del .build-dependencies 
+    && apk del .build-dependencies
+
+RUN \
+    apk add --update nodejs npm
 
 COPY appdaemon /appdaemon
 COPY startup /startup
+COPY frontend /frontend
+COPY thesillyhome /thesillyhome
 
-ENTRYPOINT ["sh", "/startup/run.sh"]
+WORKDIR /frontend
+RUN npm install
+RUN npm run build
+
+WORKDIR /
+
+ENTRYPOINT [ "echo", 'helloworld' ]
+# ENTRYPOINT [ "sh", '/startup/run' ]

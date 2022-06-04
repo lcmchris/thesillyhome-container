@@ -5,9 +5,9 @@ volumes:
 services:
   thesillyhome:
     container_name: thesillyhome
-    image: lcmchris1/thesillyhome-container
-    # restart: unless-stopped
+    image: lcmchris1/thesillyhome-container:0.0.4
+    restart: unless-stopped
     volumes:
       - thesillyhome:/thesillyhome
-    stdin_open: true
-    tty: true
+    ports:
+      - 3000:3000

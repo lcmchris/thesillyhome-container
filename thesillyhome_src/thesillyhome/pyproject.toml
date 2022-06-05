@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "thesillyhome"
+version = "0.2.8"
+description = ""
+authors = ["Chrisopher Lai"]
+license = "Apache 2.0"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+mysql-connector = "2.2.9"
+tqdm = "4.64.0"
+joblib = "1.1.0"
+threadpoolctl = "3.1.0"
+numpy = "1.22.4"
+pandas = "1.4.2"
+scikit-learn = "1.1.1"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

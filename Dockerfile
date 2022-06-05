@@ -1,33 +1,27 @@
-FROM alpine:3.16
+FROM python:3.10-slim-bullseye
+
+COPY thesillyhome_src /thesillyhome_src
+# COPY thesillyhome /thesillyhome
+
+
+RUN apt-get update && apt-get install -y curl bash
+RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
 
 RUN \
-    apk add --no-cache --virtual .build-dependencies \
-    build-base \
+    apt-get install -y \
+    build-essential \
     libffi-dev \
-    && apk add --no-cache \
-    py3-pip \
-    python3-dev \
-    py3-numpy \
-    py3-pandas \
-    py3-scikit-learn \
-    mariadb-connector-c-dev \
-    && pip3 install thesillyhome==0.2.4 \
-    && pip3 install appdaemon==4.2.1 \
-    && apk del .build-dependencies
+    nodejs 
 
-RUN \
-    apk add --update nodejs npm
+RUN pip3 install -U setuptools && \
+    # pip3 install -r /thesillyhome/requirements.txt &&\ 
+    pip3 install -e /thesillyhome_src/thesillyhome/ && \
+    pip3 install appdaemon==4.2.1
 
-COPY appdaemon /appdaemon
-COPY startup /startup
-COPY frontend /frontend
-COPY thesillyhome /thesillyhome
-
-WORKDIR /frontend
+WORKDIR /thesillyhome_src/frontend
 RUN npm install
 RUN npm run build
 
 WORKDIR /
 
-ENTRYPOINT [ "echo", 'helloworld' ]
-# ENTRYPOINT [ "sh", '/startup/run' ]
+ENTRYPOINT [ "bash", "/thesillyhome_src/startup/run.sh" ]

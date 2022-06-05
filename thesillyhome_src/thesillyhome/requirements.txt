@@ -1,0 +1,7 @@
+mysql-connector==2.2.9
+tqdm==4.64.0
+joblib==1.1.0
+threadpoolctl==3.1.0
+numpy==1.22.4
+pandas==1.4.2
+scikit-learn==1.1.1

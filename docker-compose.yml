@@ -1,13 +1,13 @@
 volumes:
-  thesillyhome:
+  thesillyhome_config:
 
 
 services:
   thesillyhome:
     container_name: thesillyhome
-    image: lcmchris1/thesillyhome-container:0.0.4
+    image: lcmchris1/thesillyhome-container:latest
     restart: unless-stopped
     volumes:
-      - thesillyhome:/thesillyhome
+      - thesillyhome_config:/thesillyhome_src/data/config/
     ports:
-      - 3000:3000
+      - 2300:2300

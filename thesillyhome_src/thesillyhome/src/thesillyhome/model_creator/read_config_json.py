@@ -62,7 +62,9 @@ def extract_float_sensors(sensors: list):
 
 float_sensors = extract_float_sensors(sensors)
 
+output_list_og = ["entity_id", "state"]
 output_list = ["entity_id", "state", "last_changed"]
+output_list_dup = ["entity_id", "state", "last_changed", "duplicate"]
 
 
 def replace_yaml():

@@ -1,7 +1,6 @@
 FROM python:3.10-slim-bullseye
 
 COPY thesillyhome_src /thesillyhome_src
-# COPY thesillyhome /thesillyhome
 
 
 RUN apt-get update && apt-get install -y curl bash
@@ -14,7 +13,6 @@ RUN \
     nodejs 
 
 RUN pip3 install -U setuptools && \
-    # pip3 install -r /thesillyhome/requirements.txt &&\ 
     pip3 install -e /thesillyhome_src/thesillyhome/ && \
     pip3 install appdaemon==4.2.1
 

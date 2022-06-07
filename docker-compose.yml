@@ -5,7 +5,7 @@ volumes:
 services:
   thesillyhome:
     container_name: thesillyhome
-    image: lcmchris1/thesillyhome-container:latest
+    image: lcmchris1/thesillyhome-container:0.0.1
     restart: unless-stopped
     volumes:
       - thesillyhome_config:/thesillyhome_src/data/config/

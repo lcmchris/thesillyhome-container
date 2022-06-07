@@ -7,6 +7,7 @@ from sklearn.tree import DecisionTreeClassifier, export_graphviz
 import numpy as np
 from sklearn.metrics import accuracy_score
 import pickle
+import logging
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -33,36 +34,43 @@ def visualize_tree(tree, actuators, feature_names, model_name_version):
     ]
     try:
         subprocess.check_call(command)
-        os.remove(f"{tsh_config.data_dir}/model/{model_name_version}/{actuator}.dot")
+        os.remove(
+            f"{tsh_config.data_dir}/model/{model_name_version}/{actuator}.dot")
     except:
         exit("Could not run dot, ie graphviz, to produce visualization")
 
 
-def train_model(actuators: list, model_name_version):
+def train_model(model_name_version):
+    '''
+    Train models for each actuator
+    '''
+
+    actuators = tsh_config.actuators
+
+    df_act_states = pd.read_pickle(
+        f"{tsh_config.data_dir}/parsed/act_states.pkl"
+    )
+    df_act_states = df_act_states.reset_index(drop=True)
 
     # Generate feature and output vectors from act states.
-    df_act_states = pd.read_csv(
-        f"{tsh_config.data_dir}/parsed/act_states.csv", index_col=False
-    ).drop(columns=["index"])
-
-    df_act_states = df_act_states.replace([np.inf, -np.inf], np.nan)
-    df_act_states = df_act_states.fillna(999)
-
     output_list = tsh_config.output_list.copy()
     act_list = list(set(df_act_states.columns) - set(output_list))
 
     for actuator in actuators:
-        print(f"Training model for {actuator}")
+        logging.info(f"Training model for {actuator}")
 
         df_act = df_act_states[df_act_states["entity_id"] == actuator]
-        df_act = df_act.reset_index(drop=True)
 
         if df_act.empty:
-            print(f"No cases found for {actuator}")
+            logging.info(f"No cases found for {actuator}")
             continue
-        output_vector = np.where(df_act["state"] == "on", 1, 0)
 
-        # the actuators state should not affect the model
+        '''
+        Setting output and feature vector
+        '''
+        output_vector = df_act["state"]
+
+        # the actuators feature state should not affect the model and also the duplicate column
         cur_act_list = []
         for feature in act_list:
             if feature.startswith(actuator):
@@ -78,19 +86,18 @@ def train_model(actuators: list, model_name_version):
         )
 
         # # Weighting more recent observations more. 3 times if in top 50 percent
-        # sample_weight = np.ones(len(X_train))
-        # sample_weight[: int(len(sample_weight) * 0.2)] = 3
+        sample_weight = np.ones(len(X_train))
+        sample_weight[: int(len(sample_weight) * 0.2)] = 3
 
         # Weighting duplicates less
-        sample_weight = X_train["duplicate"]
-
-        X_train = X_train.drop(columns="duplicate")
-        X_test = X_test.drop(columns="duplicate")
+        sample_weight = sample_weight * X_train['duplicate']
+        X_train = X_train.drop(columns='duplicate')
+        X_test = X_test.drop(columns='duplicate')
+        y_train = y_train.drop(columns='duplicate')
+        y_test = y_test.drop(columns='duplicate')
 
         model_tree = DecisionTreeClassifier(random_state=99)
         model_tree.fit(X_train, y_train, sample_weight=sample_weight)
-
-        feature_list.remove("duplicate")
 
         # Visualization of tress:
         # tree_to_code(model_tree, feature_list)
@@ -100,7 +107,7 @@ def train_model(actuators: list, model_name_version):
         y_tree_predictions = model_tree.predict(X_test)
 
         # Extract predictions for each output variable and calculate accuracy and f1 score
-        print(
+        logging.info(
             f"{actuator} accuracy score: {accuracy_score(y_test, y_tree_predictions) * 100}"
         )
 
@@ -110,4 +117,4 @@ def train_model(actuators: list, model_name_version):
 
         filename = open(f"{model_directory}/{actuator}.pickle", "wb")
         pickle.dump(model_tree, filename)
-    print("Completed!")
+    logging.info("Completed!")

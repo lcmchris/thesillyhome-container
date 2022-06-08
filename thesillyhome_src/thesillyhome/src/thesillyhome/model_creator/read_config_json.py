@@ -39,6 +39,8 @@ db_options = options["db_options"][0]
 db_password = db_options["db_password"]
 db_database = db_options["db_database"]
 db_username = db_options["db_username"]
+db_type = db_options["db_type"]
+
 db_host = db_options["db_host"]
 db_port = db_options["db_port"]
 ha_options = options["ha_options"][0]
@@ -63,8 +65,8 @@ def extract_float_sensors(sensors: list):
 float_sensors = extract_float_sensors(sensors)
 
 output_list_og = ["entity_id", "state"]
-output_list = ["entity_id", "state", "last_changed"]
-output_list_dup = ["entity_id", "state", "last_changed", "duplicate"]
+output_list = ["entity_id", "state", "last_updated"]
+output_list_dup = ["entity_id", "state", "last_updated", "duplicate"]
 
 
 def replace_yaml():

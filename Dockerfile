@@ -10,6 +10,7 @@ RUN \
     apt-get install -y \
     build-essential \
     libffi-dev \
+    libpq-dev \
     nodejs 
 
 RUN pip3 install -U setuptools && \

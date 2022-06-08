@@ -6,5 +6,5 @@ appdaemon:
   plugins:
     HASS:
       type: hass
-      ha_url: http://192.168.1.100:8123
-      token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJmODRjZTM2NmQzNTE0Y2UwOTYzMjFjZmZmZGRkZDk2ZSIsImlhdCI6MTY1NDQ5NTIyNSwiZXhwIjoxOTY5ODU1MjI1fQ.wBLKK5xqzUgcHgIEhhZcYsExHKIRB0gZErbDh6RkJhI
+      ha_url: <ha_url>
+      token: <ha_token>

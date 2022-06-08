@@ -43,7 +43,7 @@ def add_device_states(df_output: pd.DataFrame, df_states: pd.DataFrame, devices,
         last_device_state = df_states[
             (df_states["entity_id"].isin(devices))
             & (df_states["entity_id"] != row["entity_id"])
-            & (df_states["last_changed"] < row["last_changed"])
+            & (df_states["last_updated"] < row["last_updated"])
             & ~(df_states["entity_id"].isin(tsh_config.float_sensors))
         ]
 
@@ -57,7 +57,7 @@ def add_device_states(df_output: pd.DataFrame, df_states: pd.DataFrame, devices,
         # Value actual state changes more!
         last_current_device_state = df_states[
             (df_states["entity_id"] == row["entity_id"])
-            & (df_states["last_changed"] < row["last_changed"])
+            & (df_states["last_updated"] < row["last_updated"])
         ]
 
         if not last_current_device_state.empty:
@@ -72,7 +72,7 @@ def add_device_states(df_output: pd.DataFrame, df_states: pd.DataFrame, devices,
         for device in devices:
             previous_device_state = df_states[
                 (df_states["entity_id"] == device)
-                & (df_states["last_changed"] < row["last_changed"])
+                & (df_states["last_updated"] < row["last_updated"])
             ]
 
             if not previous_device_state.empty:
@@ -147,11 +147,11 @@ def parse_data_from_db():
     Code to add one hot encoding for date time.
     This will help give features for time of day and day of the week.
     """
-    df_output["hour"] = df_output["last_changed"].dt.hour
-    df_output["weekday"] = df_output["last_changed"].dt.date.apply(
+    df_output["hour"] = df_output["last_updated"].dt.hour
+    df_output["weekday"] = df_output["last_updated"].dt.date.apply(
         lambda x: x.weekday()
     )
-    df_output = df_output.drop(columns=["last_changed"])
+    df_output = df_output.drop(columns=["last_updated"])
 
     '''
     feature list extraction

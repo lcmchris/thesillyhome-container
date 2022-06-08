@@ -26,17 +26,18 @@
     ],
     "db_options": [
         {
-            "db_password": "vJi04aWV96Edzpbh",
+            "db_password": "QcDNdyaZENAtqLJc",
             "db_username": "homeassistant",
-            "db_host": "192.168.1.100",
-            "db_port": "3306",
-            "db_database": "homeassistant"
+            "db_host": "192.168.1.130",
+            "db_port": "5432",
+            "db_database": "homeassistant",
+            "db_type": "postgres"
         }
     ],
     "ha_options": [
         {
             "ha_url": "http://192.168.1.100:8123",
-            "ha_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiI5MDVmMTI5NzdhNjQ0YjEyYjhkMDIyZTE4YzMyOTRiNyIsImlhdCI6MTY1NDQ2MTg3MywiZXhwIjoxOTY5ODIxODczfQ.k1ZQ0fKG6JHVzhZCKLyZIA-u8OHWul2vVazeyU5nBSk"
+            "ha_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiI5Y2Q4MzQ5ZjNlOTA0ZGVjOGRhMTFmZWVjMDEzYjA4ZiIsImlhdCI6MTY1NDU4ODY3MCwiZXhwIjoxOTY5OTQ4NjcwfQ.DGOdEqbi_HujDZ-Xh16UiKyWCtBl2rdbQ6yl-7peLs4"
         }
     ]
 }

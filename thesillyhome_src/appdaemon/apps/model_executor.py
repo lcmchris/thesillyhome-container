@@ -1,3 +1,4 @@
+from queue import Empty
 import appdaemon.plugins.hass.hassapi as hass
 import thesillyhome.model_creator.read_config_json as tsh_config
 import pickle
@@ -15,6 +16,7 @@ class ModelExecutor(hass.Hass):
         self.model_name_version = tsh_config.model_name_version
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
+        self.last_state = None
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome has now started!")
 
@@ -55,6 +57,7 @@ class ModelExecutor(hass.Hass):
             current_state_base.loc[len(current_state_base)] = 0
             print (current_state_base)
 
+
             # Get current state of all sensors for model input
             df_sen_states = copy.deepcopy(current_state_base)
             for sensor in sensors:
@@ -65,6 +68,23 @@ class ModelExecutor(hass.Hass):
                 elif sensor in float_sensors:
                     if (true_state) in df_sen_states.columns:
                         df_sen_states[sensor] = true_state
+
+            # Update last_states
+            if self.last_states == None:
+                self.last_states = self.get_state()
+            last_states = self.last_states
+            for sensor in sensors:
+                last_state = last_states[sensor]
+                if sensor not in float_sensors:
+                    if f"last_state_{sensor}_{last_state}" in df_sen_states.columns:
+                        df_sen_states[f'last_state_{sensor}_{last_state}'] = 1
+                elif sensor in float_sensors:
+                    if (last_state) in df_sen_states.columns:
+                        df_sen_states[f'last_state_{sensor}'] = last_state
+
+            
+            all_states = self.get_state()
+
 
             # Execute all models for sensor and set states
             for act, model in self.act_model_set.items():
@@ -77,9 +97,9 @@ class ModelExecutor(hass.Hass):
                 df_sen_states_less = df_sen_states[new_feature_list]
 
                 prediction = model.predict(df_sen_states_less)
-                if prediction == 1:
+                if prediction == 1 & all_states[act]!= 'on':
                     self.log(f"Turn on {act}")
                     self.turn_on(act)
-                elif prediction == 0:
+                elif prediction == 0 & all_states[act]!= 'off':
                     self.log(f"Turn off {act}")
                     self.turn_off(act)

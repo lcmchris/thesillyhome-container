@@ -1,5 +1,5 @@
 import json
-import re
+import os
 
 """
 This is the config yaml:
@@ -22,14 +22,13 @@ This is the config yaml:
    'Test_id_2': 'Times New Roman',
 ...
 """
-env = "DEV"
 # Opening default options JSON file
-# if env == "DEV":
-#     data_dir = "/.data"
-# else:
-#     data_dir = "/data"
-data_dir = "/thesillyhome_src/data"
-f = open(f"{data_dir}/config/options.json")
+if os.environ.get('HA_ADDON') == "true":
+    data_dir = "/data"
+    f = open(f"{data_dir}/options.json")
+else:
+    data_dir = "/thesillyhome_src/data"
+    f = open(f"{data_dir}/config/options.json")
 
 options = json.load(f)
 

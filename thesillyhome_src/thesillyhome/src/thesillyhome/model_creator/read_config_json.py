@@ -1,12 +1,12 @@
 import json
 import os
 
+data_dir = "/thesillyhome_src/data"
+
 if os.environ.get("HA_ADDON") == "true":
-    data_dir = "/data"
-    f = open(f"{data_dir}/options.json")
+    f = open(f"/data/options.json")
 else:
-    data_dir = "/thesillyhome_src/data"
-    f = open(f"{data_dir}/config/options.json")
+    f = open(f"/thesillyhome_src/data/config/options.json")
 
 options = json.load(f)
 

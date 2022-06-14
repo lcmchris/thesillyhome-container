@@ -18,7 +18,6 @@ db_database = db_options["db_database"]
 db_username = db_options["db_username"]
 db_type = db_options["db_type"]
 
-
 db_host = db_options["db_host"]
 db_port = db_options["db_port"]
 
@@ -44,6 +43,7 @@ output_list_dup = ["entity_id", "state", "last_updated", "duplicate"]
 
 
 def replace_yaml():
+
     if os.environ.get("HA_ADDON") == "true":
         with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "r") as f:
             content = f.read()
@@ -54,6 +54,7 @@ def replace_yaml():
             file.write(content)
         return
     else:
+        ha_options = options["ha_options"][0]
         ha_url = ha_options["ha_url"]
         ha_token = ha_options["ha_token"]
 

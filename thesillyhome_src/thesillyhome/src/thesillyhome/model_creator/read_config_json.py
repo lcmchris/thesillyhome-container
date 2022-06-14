@@ -1,29 +1,7 @@
 import json
 import os
 
-"""
-This is the config yaml:
-    options:
-    actuactors_id:
-        - "Test_id_1"
-        - "Test_id_2"
-    sensors_id:
-        - "Test_id_1"
-        - "Test_id_2"
-    database:
-        - "Test_id_1"
-        - "Test_id_2"
-
->>>
-
-{'options': {'actuactors_id': {'Test_id_1': 'ACCENT_2',
-   'Test_id_2': 'Times New Roman',
- 'sensors_id': {'font': {'Test_id_1': 'ACCENT_2',
-   'Test_id_2': 'Times New Roman',
-...
-"""
-# Opening default options JSON file
-if os.environ.get('HA_ADDON') == "true":
+if os.environ.get("HA_ADDON") == "true":
     data_dir = "/data"
     f = open(f"{data_dir}/options.json")
 else:
@@ -39,6 +17,7 @@ db_password = db_options["db_password"]
 db_database = db_options["db_database"]
 db_username = db_options["db_username"]
 db_type = db_options["db_type"]
+
 
 db_host = db_options["db_host"]
 db_port = db_options["db_port"]
@@ -69,11 +48,22 @@ output_list_dup = ["entity_id", "state", "last_updated", "duplicate"]
 
 
 def replace_yaml():
-    with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "r") as f:
-        content = f.read()
-        content = content.replace("<ha_url>", ha_url)
-        content = content.replace("<ha_token>", ha_token)
 
-    with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "w") as file:
-        file.write(content)
-    return
+    if os.environ.get("HA_ADDON") == "true":
+        with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "r") as f:
+            content = f.read()
+            content = content.replace("<ha_url>", "http://supervisor/core")
+            content = content.replace("<ha_token>", "$SUPERVISOR_TOKEN")
+
+        with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "w") as file:
+            file.write(content)
+        return
+    else:
+        with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "r") as f:
+            content = f.read()
+            content = content.replace("<ha_url>", ha_url)
+            content = content.replace("<ha_token>", ha_token)
+
+        with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "w") as file:
+            file.write(content)
+        return

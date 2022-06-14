@@ -21,15 +21,18 @@ class ModelExecutor(hass.Hass):
         self.log("TheSillyHome has now started!")
 
     def load_models(self):
-        '''
+        """
         Loads all models to a dictionary
-        '''
+        """
         actuators = tsh_config.actuators
         act_model_set = {}
         for act in actuators:
-            if os.path.isfile(f"/thesillyhome_src/data/model/{self.model_name_version}/{act}.pickle"):
+            if os.path.isfile(
+                f"/thesillyhome_src/data/model/{self.model_name_version}/{act}.pickle"
+            ):
                 with open(
-                    f"/thesillyhome_src/data/model/{self.model_name_version}/{act}.pickle", "rb"
+                    f"/thesillyhome_src/data/model/{self.model_name_version}/{act}.pickle",
+                    "rb",
                 ) as pickle_file:
                     content = pickle.load(pickle_file)
                     act_model_set[act] = content
@@ -46,12 +49,12 @@ class ModelExecutor(hass.Hass):
 
             # Get feature list from parsed data header, set all columns to 0
             feature_list = pd.read_pickle(
-                "/thesillyhome_src/data/parsed/act_states.pkl").columns
+                "/thesillyhome_src/data/parsed/act_states.pkl"
+            ).columns
             feature_list = sorted(
-                list(set(feature_list) -
-                     set(['entity_id', 'state', "duplicate"]))
+                list(set(feature_list) - set(["entity_id", "state", "duplicate"]))
             )
-            
+
             current_state_base = pd.DataFrame(columns=feature_list)
             current_state_base.loc[len(current_state_base)] = 0
 
@@ -72,15 +75,13 @@ class ModelExecutor(hass.Hass):
 
             last_states = self.last_states
             for device in devices:
-                last_state = last_states[device]['state']
-                print(f'{device} last == {last_state}')
-                
+                last_state = last_states[device]["state"]
                 if device not in float_sensors:
                     if f"last_state_{device}_{last_state}" in df_sen_states.columns:
-                        df_sen_states[f'last_state_{device}_{last_state}'] = 1
+                        df_sen_states[f"last_state_{device}_{last_state}"] = 1
                 elif device in float_sensors:
                     if (last_state) in df_sen_states.columns:
-                        df_sen_states[f'last_state_{device}'] = last_state
+                        df_sen_states[f"last_state_{device}"] = last_state
 
             all_states = self.get_state()
 
@@ -95,12 +96,11 @@ class ModelExecutor(hass.Hass):
                 df_sen_states_less = df_sen_states[new_feature_list]
 
                 prediction = model.predict(df_sen_states_less)
-                if (prediction == 1) and (all_states[act]['state'] != "on"):
+                if (prediction == 1) and (all_states[act]["state"] != "on"):
                     self.log(f"Turn on {act}")
                     self.turn_on(act)
-                elif (prediction == 0) and (all_states[act]['state'] != "off"):
+                elif (prediction == 0) and (all_states[act]["state"] != "off"):
                     self.log(f"Turn off {act}")
                     self.turn_off(act)
-            
 
             self.last_states = self.get_state()

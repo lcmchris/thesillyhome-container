@@ -16,7 +16,7 @@ class ModelExecutor(hass.Hass):
         self.model_name_version = tsh_config.model_name_version
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
-        self.last_state = None
+        self.last_states = None
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome has now started!")
 
@@ -40,10 +40,9 @@ class ModelExecutor(hass.Hass):
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
         float_sensors = tsh_config.float_sensors
-        self.log(f'Received state {entity}')
-
+        devices = tsh_config.actuators + tsh_config.sensors
         if entity in sensors:
-            self.log(f"<----- {entity} is {new} ----->")
+            self.log(f"<--- {entity} is {new} --->")
 
             # Get feature list from parsed data header, set all columns to 0
             feature_list = pd.read_pickle(
@@ -55,8 +54,6 @@ class ModelExecutor(hass.Hass):
             
             current_state_base = pd.DataFrame(columns=feature_list)
             current_state_base.loc[len(current_state_base)] = 0
-            print (current_state_base)
-
 
             # Get current state of all sensors for model input
             df_sen_states = copy.deepcopy(current_state_base)
@@ -72,19 +69,20 @@ class ModelExecutor(hass.Hass):
             # Update last_states
             if self.last_states == None:
                 self.last_states = self.get_state()
+
             last_states = self.last_states
-            for sensor in sensors:
-                last_state = last_states[sensor]
-                if sensor not in float_sensors:
-                    if f"last_state_{sensor}_{last_state}" in df_sen_states.columns:
-                        df_sen_states[f'last_state_{sensor}_{last_state}'] = 1
-                elif sensor in float_sensors:
+            for device in devices:
+                last_state = last_states[device]['state']
+                print(f'{device} last == {last_state}')
+                
+                if device not in float_sensors:
+                    if f"last_state_{device}_{last_state}" in df_sen_states.columns:
+                        df_sen_states[f'last_state_{device}_{last_state}'] = 1
+                elif device in float_sensors:
                     if (last_state) in df_sen_states.columns:
-                        df_sen_states[f'last_state_{sensor}'] = last_state
+                        df_sen_states[f'last_state_{device}'] = last_state
 
-            
             all_states = self.get_state()
-
 
             # Execute all models for sensor and set states
             for act, model in self.act_model_set.items():
@@ -97,9 +95,12 @@ class ModelExecutor(hass.Hass):
                 df_sen_states_less = df_sen_states[new_feature_list]
 
                 prediction = model.predict(df_sen_states_less)
-                if prediction == 1 & all_states[act]!= 'on':
+                if (prediction == 1) and (all_states[act]['state'] != "on"):
                     self.log(f"Turn on {act}")
                     self.turn_on(act)
-                elif prediction == 0 & all_states[act]!= 'off':
+                elif (prediction == 0) and (all_states[act]['state'] != "off"):
                     self.log(f"Turn off {act}")
                     self.turn_off(act)
+            
+
+            self.last_states = self.get_state()

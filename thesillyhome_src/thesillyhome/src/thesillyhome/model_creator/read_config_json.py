@@ -22,8 +22,6 @@ db_type = db_options["db_type"]
 db_host = db_options["db_host"]
 db_port = db_options["db_port"]
 ha_options = options["ha_options"][0]
-ha_url = ha_options["ha_url"]
-ha_token = ha_options["ha_token"]
 
 
 model_name = "Base"
@@ -59,6 +57,9 @@ def replace_yaml():
             file.write(content)
         return
     else:
+        ha_url = ha_options["ha_url"]
+        ha_token = ha_options["ha_token"]
+
         with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "r") as f:
             content = f.read()
             content = content.replace("<ha_url>", ha_url)

@@ -18,16 +18,18 @@
 	import TipTap from '$lib/TipTap.svelte';
 </script>
 
-<Tabbar tabs={['Home', 'Config', 'Dashboard', 'About Us']} let:tab bind:active>
+<Tabbar tabs={['Home', 'Dashboard', 'About Us']} let:tab bind:active>
 	<Tab {tab}>
 		<Label>{tab}</Label>
 	</Tab>
 </Tabbar>
-{#if active === 'Config'}
-	<pre>Yaml</pre>
-	<!-- <TipTap /> -->
+{#if active === 'Home'}
+	<Button on:click{spawn} style="margin: 50px 50px 50px 50px;">Run</Button>
+	<!-- {#if active === 'Config'} -->
+	<!-- <pre>Yaml</pre>
+	<TipTap />
 
-	<!-- <pre>ML settings</pre>
+	<pre>ML settings</pre>
 	<div>
 		<Textfield bind:value={actuators_id} label="actuators_id">
 			<HelperText slot="helper">List of actuators_id (comma delimited)</HelperText>
@@ -56,8 +58,8 @@
 		</Textfield>
 	</div>
 	<div><Button action="/contact" method="POST">Save</Button></div> -->
-{:else if active === 'Home'}
-	<Button on:click{spawn}>Run</Button>
+{:else if active === 'Dashboard'}
+	<pre style="margin: 50px 50px 50px 50px;">Results</pre>
 {:else}
 	<div />
 {/if}

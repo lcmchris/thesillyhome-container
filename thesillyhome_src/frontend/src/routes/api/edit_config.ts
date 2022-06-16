@@ -1,6 +1,6 @@
-// import { readFileSync, writeFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 
-const config_file_path = '.storage/config.yaml'
+const config_file_path = 'config.yaml'
 
 export function get(request) {
     const data = readFileSync(config_file_path, 'utf-8')

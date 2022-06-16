@@ -1,3 +1,4 @@
+#!/bin/bash
 echo "Starting to parse DB data"
 # python3 -m thesillyhome.model_creator.main
 python3 -m thesillyhome.model_creator.main

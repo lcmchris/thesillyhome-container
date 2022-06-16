@@ -50,6 +50,7 @@
 		"@sveltejs/adapter-node": "^1.0.0-next.78",
 		"@tiptap/core": "^2.0.0-beta.176",
 		"@tiptap/extension-code-block-lowlight": "^2.0.0-beta.68",
-		"@tiptap/starter-kit": "^2.0.0-beta.185"
+		"@tiptap/starter-kit": "^2.0.0-beta.185",
+		"svelte-kit": "^1.0.0"
 	}
 }

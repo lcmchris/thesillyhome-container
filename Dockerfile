@@ -1,7 +1,6 @@
-FROM python:3.10-slim-bullseye
+FROM python:3.9-slim-bullseye
 
 COPY thesillyhome_src /thesillyhome_src
-
 
 RUN apt-get update && apt-get install -y curl bash
 RUN curl -sL https://deb.nodesource.com/setup_16.x | bash -
@@ -13,9 +12,11 @@ RUN \
     libpq-dev \
     nodejs 
 
-RUN pip3 install -U setuptools && \
-    pip3 install -e /thesillyhome_src/thesillyhome/ && \
-    pip3 install appdaemon==4.2.1
+ARG PIP_EXTRA_INDEX_URL=https://www.piwheels.org/simple
+RUN pip install --upgrade pip
+RUN pip3 install setuptools==62.4.0
+RUN pip3 install -e /thesillyhome_src/thesillyhome/
+RUN pip3 install appdaemon==4.2.1
 
 WORKDIR /thesillyhome_src/frontend
 RUN npm install

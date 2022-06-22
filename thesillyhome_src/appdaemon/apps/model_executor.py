@@ -56,7 +56,7 @@ class ModelExecutor(hass.Hass):
             )
 
             current_state_base = pd.DataFrame(columns=feature_list)
-            current_state_base.loc[len(current_state_base)] = 0
+            current_state_base.loc[0] = 0
 
             # Get current state of all sensors for model input
             df_sen_states = copy.deepcopy(current_state_base)

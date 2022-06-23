@@ -2,12 +2,10 @@
 	import DefaultTabbar from '$lib/DefaultTabbar.svelte';
 	import Button, { Group } from '@smui/button';
 	import Drawer, { AppContent, Content } from '@smui/drawer';
-	import List, { Item, Text } from '@smui/list';
+	import List, { Graphic, Item, Text } from '@smui/list';
 	import { navigating } from '$app/stores';
 	// Example spinner/loading component is visible (when $navigating != null):
-	let clicked = 'nothing yet';
-	let script_output;
-	export let test;
+	let script_output = 'Not started';
 
 	async function run_script(program, command) {
 		const response = await fetch('/Controls', {
@@ -21,11 +19,7 @@
 			})
 		});
 		// script_output = await response.text();
-		script_output = await response.json();
-
-		test.stdout.on('data', (data) => {
-			console.log(`stdout: ${data}`);
-		});
+		script_output = await response.text();
 	}
 </script>
 
@@ -40,40 +34,10 @@
 					on:click={() =>
 						run_script('python', [
 							'-u',
-							'C:/Users/lcmch/.repo/thesillyhome-container/thesillyhome_src/frontend/test.py'
-						])}
-					on:click={() => (clicked = 'test')}
-				>
-					<Text>test</Text>
-				</Item>
-				<Item
-					href="javascript:void(0)"
-					on:click={() =>
-						run_script('python', [
-							'-u',
 							'/thesillyhome_src/thesillyhome/src/thesillyhome/model_creator/main.py'
 						])}
-					on:click={() => (clicked = 'Re-calibrate models')}
 				>
 					<Text>Re-calibrate models</Text>
-				</Item>
-				<Item
-					href="javascript:void(0)"
-					on:click={() => run_script('appdaemon', ['-c', '/thesillyhome_src/appdaemon/'])}
-					on:click={() => (clicked = 'Start Model Executor')}
-				>
-					<Text>Start Model Executor</Text>
-				</Item>
-				<Item
-					href="javascript:void(0)"
-					on:click={() =>
-						run_script('python', [
-							'-u',
-							'/thesillyhome_src/thesillyhome/src/thesillyhome/model_creator/main.py'
-						])}
-					on:click={() => (clicked = 'Stop Model Executor')}
-				>
-					<Text>Stop Model Executor</Text>
 				</Item>
 			</List>
 		</Content>
@@ -81,9 +45,13 @@
 
 	<AppContent class="app-content">
 		<div class="main-content">
-			<pre>content.</pre>
-			<pre class="status">Clicked: {clicked}</pre>
-			<pre> {script_output}</pre>
+			Console Output<br />
+
+			{#await run_script}
+				<pre>Loading...</pre>
+			{:then}
+				<pre>{script_output}</pre>
+			{/await}
 		</div>
 	</AppContent>
 </div>

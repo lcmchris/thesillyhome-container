@@ -2,70 +2,115 @@
 
 # Introduction
 
+Smart homes aren’t very smart. Managing all your device automation rules is tedious. 
 
+That’s why The Silly Home aims to transform the static rules paradigm into a dynamic AI based approach to the connected home.
 
-# Installation guide
+Find out more at https://thesillyhome.com/
 
+This repo is a docker-container built to be used with Homeassistant.
+</br></br>
 
-## HA Addon Setup
-In this setup, we have a pip installable repo that hosts all the code https://github.com/lcmchris/thesillyhome-addon-repo. This is installed onto the addon container and is built onto the addon-image.
-This addon uses the Appdaemon to control devices. This decision was made due to the simplicity of its implementation
+# How it works
 
+Our intuition is that with enough sensor data, we can build an accurate model to predict your future device states based on your historical device states. 
 
-# Contribution guide
+### Design
 
+Terminology:
+- actuators = Any entity's state you want to create a model and predict for. ie. living_room_light_1.state, living_room_light_2.state
+- sensors = Any entities that act as the triggers and conditions. ie. sensor.occupancy
+- devices = actuators + sensors
 
-# Architecture diagram 
-
-
-- This repository is an addo-on that tries to help apply ML to your homeassistance.
-- This aims to act as a proof of concept that applying ML to homeautomation works and a future with J.A.R.V.I.S is closer than we thought.
-- This is opensource but a wider vision is to apply this to all homeautomation platforms (think APIs and centralised AI models). This is the tenet of <a href="https://thesillyhome.com/about-us/#our-mission">The silly home</a>.
-
-
-
-# How this works
-<h2> ML design </h2>
-
-Terminology used :
-actuators = Any entity's state you want to create a model and predict for. ie. living_room_light_1.state, living_room_light_2.state
-sensors = Any entities that act as the triggers and conditions. ie. sensor.occupancy
-devices = actuators + sensors
-
-Intuition:
-With a new device state change, predict if any other actuators need to change.
-1 Model per actuator
-
-1) Data extraction
-2) Learning model
-3) Appdaemon Execution
-
-
-<h2> Data extraction </h2>
-Homeassistant stores state data. This step extracts and parses this data into a ML trainable format (hot encoded of categorical values, constant status publish vs state changes etc..). 
+#### 1. Data extraction 
+Homeassistant stores state data. This step extracts and parses this data into a machine learning (‘ML’) trainable format (hot encoded categorical values, constant status publish vs state changes etc.). 
 
 The end output frame is munged to show for each state published for an actuator, the state of other sensors and actuators.
 
-The data is strucutred in a csv and looks like this:
-actuators, states, created, duplicate, senor1, sensor2, sensor3, sensor4...
+The data is structured in a csv and formatted the following way:
+actuators, states, created, duplicate, sensor1, sensor2, sensor3, sensor4...
 
-<h2> Learning model </h2>
-As a phase one, our focus will be to predict lights using motion sensors, light sensors, other lights, device location, weather as inputs.
-Only sklearn Decision Tree model is used.
+#### 2. Learning model 
+As a phase one, our focus will be to predict lights
+At the moment a simple sklearn Decision Tree model is used.
 
-<h2> Appdaemon Execution </h2>
+There are additional features aimed to improve the accuracy:
+Higher weighting for more recent data
+Using the Last state as a feature input.
+
+#### 3. Appdaemon Execution 
 For ease of deployment, the decision was made to leverage Appdaemon in order to use the prediction models created in real time!
-For each sensor change there is a request to predict the new states for actuators and performs them.
 
+For each sensor change there is a request to predict the new states for actuators and perform them.
 
-Add-on documentation: N/A
+### Architecture diagram 
+<insert here>
 
+</br></br>
+# Installation guide
 
+### Dependencies
 
-# Features Roadmap
+Homeassistant OS or Container.
 
-<h3> Routine extraction? </h3>
-There is an open thought that having these untrained, underperforming models (at this stage) to directly manage your home is a bad idea. A perhapes better one is to make it predict your required routines.
+Recorder component enabled using mariadb or postgreSQL. (Note it is highly recommended to disable the auto_purge settings as well.)
 
-<h2> Model Performance dashboard? </h2>
-Having a black box is probably not ideal for The silly home, adding some visibility on the models giving performance will help let you pick and choose the models to activate.
+## Setup 
+There is support for both types of Homeassistant installations:
+
+### Setup for Homeassistant OS
+Install the Homeassistant add-on using [thesillyhome-addon-repo](https://github.com/lcmchris/thesillyhome-addon-repo).
+
+### Setup for Homeassistant Container
+To install this container, run the following:
+```
+git clone git@github.com:lcmchris/thesillyhome-container.git
+
+docker volume create thesillyhome
+# Find the path to volume
+cp thesillyhome_src\data\config\options.json <path_to_volume>
+# Amend the copied options.json
+
+docker-compose up -d
+```
+
+### Configuration file
+
+```
+actuactors_id: List of all entity_ids of actuators.
+sensors_id: List of all entity_ids of sensors.
+db_options: All settings for connecting to the homeassistant database
+  db_password: Database password 
+  db_username: Database username e.g homeassistant
+  db_host:  Database host 192.168.1.100
+  db_port:  Database port '3306'
+  db_database:  Database name homeassistant
+	db_type:  Database type. Only {mariadb,postgres} is supported
+ha_options: All settings for connecting to homeassistant. These settings are only required for Homeassistant Container setup.
+  ha_url: IP of your homeassistant
+	ha_token: Long lived access token. See to create one. This is required for the Appdaemon. [How to generate long lived access token](https://www.atomicha.com/home-assistant-how-to-generate-long-lived-access-token-part-1/)
+ ```
+ 
+See the [example config file](https://github.com/lcmchris/thesillyhome-container/blob/master/thesillyhome_src/data/config/options.json) for more details
+  
+</br></br>
+# Contribution guide
+
+### Support
+Reach out in our [Discord](https://discord.com/channels/983116130061271040/983116130061271043) for support on issues.
+Raise code issues in GitHub and tag as bugs.
+
+### Feature Requests
+Discuss features in our [Discord](https://discord.com/channels/983116130061271040/983116623693095023).
+Raise issues on GitHub and tag as enhancements.
+
+</br></br>
+# Feature Roadmap
+
+Please see [The Silly Home Features Roadmap Git Projects](https://github.com/users/lcmchris/projects/1) 
+
+### Routine extraction?
+There is an open thought that having these untrained, underperforming models (at this stage) to directly manage your home is a bad idea. A perhaps better one is to make it predict your required routines.
+
+### Model Performance dashboard?
+Having a black box is probably not ideal for The Silly Home, adding some visibility on the models giving performance will help let you pick and choose the models to activate.

@@ -3,7 +3,7 @@
 
 	export let metrics;
 
-	import List, { Item, Graphic, Meta, Text, PrimaryText, SecondaryText } from '@smui/list';
+	import List, { Item, Graphic, Text, PrimaryText, SecondaryText } from '@smui/list';
 
 	let selection;
 </script>
@@ -22,6 +22,8 @@
 				<Text>
 					<PrimaryText>{metric.actuator}</PrimaryText>
 					<SecondaryText>Accuracy = {metric.accuracy}</SecondaryText>
+					<SecondaryText>Precision = {metric.precision}</SecondaryText>
+					<SecondaryText>Recall = {metric.recall}</SecondaryText>
 				</Text>
 			</Item>
 		{/each}

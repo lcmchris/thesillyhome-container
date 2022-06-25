@@ -2,9 +2,9 @@ import { spawnSync } from 'child_process';
 
 export async function post({ request }) {
     const body = await request.json()
-    console.log(`Process started with ${body.program, body.command}`);
 
     const child = spawnSync(body.program, body.command)
+    console.log(`Process started with ${body.program, body.command}`);
 
     if (child.status !== 0) {
 

@@ -55,7 +55,7 @@ def train_model(model_name_version):
     act_list = list(set(df_act_states.columns) - set(output_list))
 
     # Adding metrics matrix
-    metrics_matrix = {}
+    metrics_matrix = []
 
     for actuator in actuators:
         logging.info(f"Training model for {actuator}")
@@ -108,8 +108,14 @@ def train_model(model_name_version):
         y_tree_predictions = model_tree.predict(X_test)
 
         # Extract predictions for each output variable and calculate accuracy and f1 score
+        metrics_json = {}
+        metrics_json["actuator"] = actuator
+        metrics_json["accuracy"] = accuracy_score(y_test, y_tree_predictions)
+        metrics_json["precision"] = actuator
+        metrics_json["recall"] = actuator
 
-        metrics_matrix[actuator] = accuracy_score(y_test, y_tree_predictions)
+        metrics_matrix.append(metrics_json)
+
         logging.info(
             f"{actuator} accuracy score: {accuracy_score(y_test, y_tree_predictions) * 100}"
         )

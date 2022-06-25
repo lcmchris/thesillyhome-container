@@ -6,7 +6,7 @@ Smart homes aren’t very smart. Managing all your device automation rules is te
 
 That’s why The Silly Home aims to transform the static rules paradigm into a dynamic AI based approach to the connected home.
 
-Find out more at https://thesillyhome.com/
+Find out more at our homepage https://thesillyhome.com/.
 
 This repo is a docker-container built to be used with Homeassistant.
 </br></br>
@@ -53,13 +53,14 @@ For each sensor change there is a request to predict the new states for actuator
 
 Homeassistant OS or Container.
 
-Recorder component enabled using mariadb or postgreSQL. (Note it is highly recommended to disable the auto_purge settings as well.)
+Recorder component enabled using mariadb or postgreSQL with auto_purge disabled.
 
 ## Setup 
 There is support for both types of Homeassistant installations:
 
 ### Setup for Homeassistant OS
 Install the Homeassistant add-on using [thesillyhome-addon-repo](https://github.com/lcmchris/thesillyhome-addon-repo).
+
 
 ### Setup for Homeassistant Container
 To install this container, run the following:

@@ -86,9 +86,9 @@ db_options: All settings for connecting to the homeassistant database
   db_port:  Database port '3306'
   db_database:  Database name homeassistant
 	db_type:  Database type. Only {mariadb,postgres} is supported
-ha_options: All settings for connecting to homeassistant. These settings are only required for Homeassistant Container setup.
+ ha_options: All settings for connecting to homeassistant. These settings are only required for Homeassistant Container setup.
   ha_url: IP of your homeassistant
-	ha_token: Long lived access token. See to create one. This is required for the Appdaemon. [How to generate long lived access token](https://www.atomicha.com/home-assistant-how-to-generate-long-lived-access-token-part-1/)
+  ha_token: Long lived access token. This is required for the Appdaemon.
  ```
  
 See the [example config file](https://github.com/lcmchris/thesillyhome-container/blob/master/thesillyhome_src/data/config/options.json) for more details

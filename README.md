@@ -44,7 +44,7 @@ For ease of deployment, the decision was made to leverage Appdaemon in order to 
 For each sensor change there is a request to predict the new states for actuators and perform them.
 
 ### Architecture diagram 
-![alt text](https://github.com/lcmchris/thesillyhome-container/blob/documentation/doc/arch_diagram.svg)
+![alt text](https://github.com/lcmchris/thesillyhome-container/blob/documentation/doc/arch_diagram.png)
 
 </br></br>
 # Installation guide

@@ -15,7 +15,7 @@
 		<Title>Support</Title>
 		<Subtitle />
 		<Content
-			>If you like this please visit ---
+			>If you like this please visit us at
 			<a href="https://thesillyhome.com/"> The Silly Home</a>
 		</Content>
 	</Paper>
@@ -23,6 +23,6 @@
 
 <style>
 	div {
-		margin: 100px 100px 100px 100px;
+		margin: 25px 25px 25px 25px;
 	}
 </style>

@@ -36,8 +36,9 @@
 							'-u',
 							'/thesillyhome_src/thesillyhome/src/thesillyhome/model_creator/main.py'
 						])}
+					style="background-color: #EBAC0E; "
 				>
-					<Text>Re-calibrate models</Text>
+					<Text style="color: #000000;">Re-calibrate models</Text>
 				</Item>
 			</List>
 		</Content>
@@ -46,7 +47,6 @@
 	<AppContent class="app-content">
 		<div class="main-content">
 			Console Output<br />
-
 			{#await run_script}
 				<pre>Loading...</pre>
 			{:then}
@@ -64,10 +64,10 @@
 		display: flex;
 		height: 350px;
 		/* max-width: 600px; */
-		border: 1px solid var(--mdc-theme-text-hint-on-background, rgba(0, 0, 0, 0.1));
+		border: 1px solid var(--mdc-theme-text-hint-on-background, #ebac0e);
 		overflow: hidden;
 		z-index: 0;
-		margin: 100px 100px 100px 100px;
+		margin: 25px 25px 25px 25px;
 	}
 
 	* :global(.app-content) {

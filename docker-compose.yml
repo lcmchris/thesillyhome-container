@@ -1,6 +1,6 @@
 volumes:
   thesillyhome_config:
-
+    name: thesillyhome_config
 
 services:
   thesillyhome:

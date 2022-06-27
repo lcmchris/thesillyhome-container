@@ -4,47 +4,69 @@
 	export let metrics;
 
 	import List, { Item, Graphic, Text, PrimaryText, SecondaryText } from '@smui/list';
+	import LayoutGrid, { Cell } from '@smui/layout-grid';
+	import DataTable, { Head, Body, Row, Cell as DataCell } from '@smui/data-table';
 
-	let selection;
+	let actuator = 'No value';
+	let accuracy = 'Select the actuator';
+	let precision = '		';
+	let recall = '			';
 </script>
 
 <DefaultTabbar active="Dashboard" />
 
-<div class="dashboard-table">
-	<List class="act-list" twoLine avatarList singleSelection>
-		{#each metrics as metric}
-			<Item
-				on:SMUI:action={() => (selection = metric.actuator)}
-				disabled={metric.disabled}
-				selected={selection === metric.actuator}
-			>
-				<Graphic style="background-image: url(/icons/light_icon.svg)" />
-				<Text>
-					<PrimaryText>{metric.actuator}</PrimaryText>
-					<SecondaryText>Accuracy = {metric.accuracy}</SecondaryText>
-					<SecondaryText>Precision = {metric.precision}</SecondaryText>
-					<SecondaryText>Recall = {metric.recall}</SecondaryText>
-				</Text>
-			</Item>
-		{/each}
-	</List>
-</div>
+<LayoutGrid>
+	<Cell>
+		<List class="act-list" twoLine avatarList singleSelection>
+			{#each metrics as metric}
+				<Item
+					on:SMUI:action={() => (
+						(actuator = metric.actuator),
+						(accuracy = metric.accuracy),
+						(precision = metric.precision),
+						(recall = metric.recall)
+					)}
+					disabled={metric.disabled}
+					selected={actuator === metric.actuator}
+				>
+					<Graphic style="background-image: url(/icons/light_icon.svg)" />
+					<Text>
+						<PrimaryText>{metric.actuator}</PrimaryText>
+						<SecondaryText>Accuracy = {metric.accuracy}</SecondaryText>
+					</Text>
+				</Item>
+			{/each}
+		</List>
+	</Cell>
+	<Cell>
+		<DataTable style="border-style: solid; border-width: 1px; margin: 25px 25px 25px 25px;">
+			<Head>
+				<Row>
+					<DataCell>Metric</DataCell>
+					<DataCell>Value</DataCell>
+				</Row>
+			</Head>
+			<Body>
+				<Row>
+					<DataCell>Accuracy</DataCell>
+					<DataCell numeric>{accuracy}</DataCell>
+				</Row>
+				<Row>
+					<DataCell>Precision</DataCell>
+					<DataCell numeric>{precision}</DataCell>
+				</Row>
+				<Row>
+					<DataCell>Recall</DataCell>
+					<DataCell numeric>{recall}</DataCell>
+				</Row>
+			</Body>
+		</DataTable>
+	</Cell>
+</LayoutGrid>
 
 <style>
-	/* These classes are only needed because the
-      drawer is in a container on the page. */
-	.dashboard-table {
-		position: relative;
-		display: flex;
-		height: 350px;
-		/* max-width: 600px; */
-		border: 1px solid var(--mdc-theme-text-hint-on-background, rgba(0, 0, 0, 0.1));
-		overflow: hidden;
-		z-index: 0;
-		margin: 100px 100px 100px 100px;
-	}
-
-	* :global(.act-list) {
-		max-width: 600px;
+	.test-cell {
+		border-style: solid;
+		border-width: 1px;
 	}
 </style>

@@ -3,41 +3,23 @@ import os
 import subprocess
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier, export_graphviz
+from sklearn.tree import DecisionTreeClassifier, plot_tree
 import numpy as np
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score
 import pickle
 import logging
 import json
+import matplotlib.pyplot as plt
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 
-def visualize_tree(tree, actuators, feature_names, model_name_version):
-    """Create tree png using graphviz.
-    Args
-    ----
-    tree -- scikit-learn DecsisionTree.
-    feature_names -- list of feature names.
-    """
-    with open(
-        f"{tsh_config.data_dir}/model/{model_name_version}/{actuator}.dot", "w"
-    ) as f:
-        export_graphviz(tree, out_file=f, feature_names=feature_names)
-
-    command = [
-        "dot",
-        "-Tpng",
-        f"{tsh_config.data_dir}/model/{model_name_version}/{actuator}.dot",
-        "-o",
-        f"{tsh_config.data_dir}/model/{model_name_version}/{actuator}.png",
-    ]
-    try:
-        subprocess.check_call(command)
-        os.remove(f"{tsh_config.data_dir}/model/{model_name_version}/{actuator}.dot")
-    except:
-        exit("Could not run dot, ie graphviz, to produce visualization")
+def save_visual_tree(model_tree, actuator, model_name_version):
+    # plot tree
+    plt.figure(figsize=(12, 12))  # set plot size (denoted in inches)
+    plot_tree(model_tree, fontsize=10)
+    plt.savefig(f"{tsh_config.data_dir}/model/{model_name_version}/{actuator}_tree.png")
 
 
 def train_model(model_name_version):
@@ -102,22 +84,28 @@ def train_model(model_name_version):
 
         # Visualization of tress:
         # tree_to_code(model_tree, feature_list)
-        # visualize_tree(model_tree, feature_list)
+        save_visual_tree(model_tree, actuator, model_name_version)
 
         # Get predictions of model
         y_tree_predictions = model_tree.predict(X_test)
 
         # Extract predictions for each output variable and calculate accuracy and f1 score
+        accuracy = accuracy_score(y_test, y_tree_predictions)
+        precision = precision_score(y_test, y_tree_predictions)
+        recall = recall_score(y_test, y_tree_predictions)
+
         metrics_json = {}
         metrics_json["actuator"] = actuator
-        metrics_json["accuracy"] = accuracy_score(y_test, y_tree_predictions)
-        metrics_json["precision"] = actuator
-        metrics_json["recall"] = actuator
+        metrics_json["accuracy"] = accuracy
+        metrics_json["precision"] = precision
+        metrics_json["recall"] = recall
 
         metrics_matrix.append(metrics_json)
 
         logging.info(
-            f"{actuator} accuracy score: {accuracy_score(y_test, y_tree_predictions) * 100}"
+            f"{actuator} accuracy score: {accuracy * 100}" + "\n"
+            f"{actuator} precision score: {precision * 100}" + "\n"
+            f"{actuator} recall score: {recall * 100}"
         )
 
         # Save model to disk

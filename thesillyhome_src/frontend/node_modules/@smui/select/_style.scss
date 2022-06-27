@@ -1,0 +1,10 @@
+@use '@material/select/mdc-select';
+@use '@smui/floating-label/style' as floating-label-style;
+@use '@smui/line-ripple/style' as line-ripple-style;
+@use '@smui/notched-outline/style' as notched-outline-style;
+@use '@smui/list/style' as list-style;
+@use '@smui/menu-surface/style' as menu-surface-style;
+@use '@smui/menu/style' as menu-style;
+@use './mixins';
+
+@include mixins.core-styles;

@@ -131,6 +131,7 @@ dmypy.json
 # png & pickle & csv
 *.csv
 *.pickle
+*.pkl
 *.png
 *.json
 secrets.yaml

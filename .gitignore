@@ -135,3 +135,4 @@ dmypy.json
 *.png
 *.json
 secrets.yaml
+thesillyhome_src/frontend/node_modules

@@ -135,3 +135,5 @@ dmypy.json
 *.png
 *.json
 secrets.yaml
+thesillyhome_src/appdaemon/appdaemon.yaml
+thesillyhome_src/data/parsed/act_states.pkl

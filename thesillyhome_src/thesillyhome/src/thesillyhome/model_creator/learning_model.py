@@ -115,6 +115,6 @@ def train_model(model_name_version):
         filename = open(f"{model_directory}/{actuator}.pickle", "wb")
         pickle.dump(model_tree, filename)
 
-    with open(f"/thesillyhome_src/frontend/data/metrics_matrix.json", "w") as fp:
+    with open(f"/thesillyhome_src/frontend/static/data/metrics_matrix.json", "w") as fp:
         json.dump(metrics_matrix, fp)
     logging.info("Completed!")

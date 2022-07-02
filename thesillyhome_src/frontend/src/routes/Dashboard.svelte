@@ -1,16 +1,26 @@
 <script lang="ts">
 	import DefaultTabbar from '$lib/DefaultTabbar.svelte';
 
-	export let metrics;
-
 	import List, { Item, Graphic, Text, PrimaryText, SecondaryText } from '@smui/list';
 	import LayoutGrid, { Cell } from '@smui/layout-grid';
 	import DataTable, { Head, Body, Row, Cell as DataCell } from '@smui/data-table';
+
+	export let metrics;
 
 	let actuator = 'No value';
 	let accuracy = 'Select the actuator';
 	let precision = '		';
 	let recall = '			';
+
+	async function getFileTime(path) {
+		const query = new URLSearchParams();
+		query.set('path', String(path));
+
+		console.log('Fetchign');
+		const response = await fetch(`/api/FileUpdateTime/?${query.toString()}`);
+		const time = await response.json();
+		return time;
+	}
 </script>
 
 <DefaultTabbar active="Dashboard" />
@@ -38,8 +48,8 @@
 			{/each}
 		</List>
 	</Cell>
-	<Cell>
-		<DataTable style="border-style: solid; border-width: 1px; margin: 25px 25px 25px 25px;">
+	<Cell align="top">
+		<DataTable style="border-style: solid; border-width: 1px; margin: 15px 15px 15px 15px;">
 			<Head>
 				<Row>
 					<DataCell>Metric</DataCell>
@@ -61,12 +71,35 @@
 				</Row>
 			</Body>
 		</DataTable>
+
+		<div class="container">
+			<input type="checkbox" id="zoomCheck" />
+			{#if actuator != 'No value'}
+				<label for="zoomCheck">
+					<img
+						src="/data/{actuator}_tree.png?m={getFileTime(`./static/data/${actuator}_tree.png`)}"
+						alt={actuator}
+						style="width: 100%;height: 100%"
+					/>
+				</label>
+			{/if}
+		</div>
 	</Cell>
 </LayoutGrid>
 
 <style>
-	.test-cell {
-		border-style: solid;
-		border-width: 1px;
+	input[type='checkbox'] {
+		display: none;
+	}
+
+	.container img {
+		margin: 10px;
+		transition: transform 0.25s ease;
+		cursor: zoom-in;
+	}
+
+	input[type='checkbox']:checked ~ label > img {
+		transform: scale(2);
+		cursor: zoom-out;
 	}
 </style>

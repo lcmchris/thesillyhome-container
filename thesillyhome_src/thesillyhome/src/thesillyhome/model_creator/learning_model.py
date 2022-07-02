@@ -15,11 +15,11 @@ import matplotlib.pyplot as plt
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 
-def save_visual_tree(model_tree, actuator, model_name_version):
+def save_visual_tree(model_tree, actuator, feature_vector):
     # plot tree
     plt.figure(figsize=(12, 12))  # set plot size (denoted in inches)
-    plot_tree(model_tree, fontsize=10)
-    plt.savefig(f"{tsh_config.data_dir}/model/{model_name_version}/{actuator}_tree.png")
+    plot_tree(model_tree, fontsize=10, feature_names=feature_vector)
+    plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
 
 
 def train_model(model_name_version):
@@ -84,7 +84,7 @@ def train_model(model_name_version):
 
         # Visualization of tress:
         # tree_to_code(model_tree, feature_list)
-        save_visual_tree(model_tree, actuator, model_name_version)
+        save_visual_tree(model_tree, actuator, feature_list)
 
         # Get predictions of model
         y_tree_predictions = model_tree.predict(X_test)
@@ -115,8 +115,6 @@ def train_model(model_name_version):
         filename = open(f"{model_directory}/{actuator}.pickle", "wb")
         pickle.dump(model_tree, filename)
 
-    with open(
-        f"{tsh_config.data_dir}/model/{model_name_version}/metrics_matrix.json", "w"
-    ) as fp:
+    with open(f"/thesillyhome_src/frontend/data/metrics_matrix.json", "w") as fp:
         json.dump(metrics_matrix, fp)
     logging.info("Completed!")

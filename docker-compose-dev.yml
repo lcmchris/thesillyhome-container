@@ -10,7 +10,7 @@ services:
     image: lcmchris1/thesillyhome-container:dev
     restart: unless-stopped
     volumes:
-      - .\thesillyhome_src\appdaemon\:/thesillyhome_src/appdaemon/
+      - .\thesillyhome_src\appdaemon\apps\:/thesillyhome_src/appdaemon/apps/
       - .\thesillyhome_src\startup\:/thesillyhome_src/startup/
       - .\thesillyhome_src\thesillyhome\:/thesillyhome_src/thesillyhome/
       - thesillyhome_config:/thesillyhome_src/data/config/

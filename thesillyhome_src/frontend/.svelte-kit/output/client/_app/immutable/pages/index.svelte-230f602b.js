@@ -1,1 +1,0 @@
-import{S as s,i as e,s as n}from"../chunks/index-718d9243.js";async function r(){return{status:302,redirect:"/Controls"}}class l extends s{constructor(t){super(),e(this,t,null,null,n,{})}}export{l as default,r as load};

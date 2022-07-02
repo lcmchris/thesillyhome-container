@@ -14,12 +14,12 @@ var __spreadValues = (a, b) => {
     }
   return a;
 };
-import { c as create_ssr_component, a as compute_rest_props, g as get_current_component, s as setContext, q as onDestroy, b as spread, d as escape_attribute_value, f as escape_object, h as add_attribute, v as validate_component, r as is_promise, t as noop, e as escape } from "../../chunks/index-f5246ab7.js";
-import { f as forwardEventsBuilder, c as classMap, a as classAdderBuilder, D as Div, e as H1, g as H2, d as DefaultTabbar } from "../../chunks/classAdderBuilder-56fb7b9f.js";
+import { c as create_ssr_component, a as compute_rest_props, g as get_current_component, s as setContext, q as onDestroy, b as spread, d as escape_attribute_value, f as escape_object, h as add_attribute, v as validate_component, r as is_promise, t as noop, e as escape } from "../../chunks/index-3c4e05aa.js";
+import { f as forwardEventsBuilder, c as classMap, a as classAdderBuilder, D as Div, e as H1, g as H2, d as DefaultTabbar } from "../../chunks/classAdderBuilder-ba67c6d2.js";
 import "@material/ripple";
 import "@material/dom";
 import { MDCDismissibleDrawerFoundation, MDCModalDrawerFoundation } from "@material/drawer";
-import { d as dispatch, L as List, I as Item, T as Text } from "../../chunks/index-76ee2332.js";
+import { d as dispatch, L as List, I as Item, T as Text } from "../../chunks/index-4ca7f231.js";
 import "@material/tab-bar";
 import "@material/tab-scroller";
 import "@material/tab";
@@ -183,7 +183,7 @@ classAdderBuilder({
 });
 var Controls_svelte_svelte_type_style_lang = "";
 const css = {
-  code: ".drawer-container.svelte-qdtyr1{position:relative;display:flex;height:350px;border:1px solid var(--mdc-theme-text-hint-on-background, rgba(0, 0, 0, 0.1));overflow:hidden;z-index:0;margin:100px 100px 100px 100px}.svelte-qdtyr1 .app-content{flex:auto;position:relative;flex-grow:1}.main-content.svelte-qdtyr1{overflow:auto;padding:16px;height:100%;box-sizing:border-box}",
+  code: ".drawer-container.svelte-1ye5j9e{position:relative;display:flex;height:350px;border:1px solid var(--mdc-theme-text-hint-on-background, #ebac0e);overflow:hidden;z-index:0;margin:25px 25px 25px 25px}.svelte-1ye5j9e .app-content{flex:auto;position:relative;flex-grow:1}.main-content.svelte-1ye5j9e{overflow:auto;padding:16px;height:100%;box-sizing:border-box}",
   map: null
 };
 const Controls = create_ssr_component(($$result, $$props, $$bindings, slots) => {
@@ -199,15 +199,18 @@ const Controls = create_ssr_component(($$result, $$props, $$bindings, slots) => 
   $$result.css.add(css);
   return `${validate_component(DefaultTabbar, "DefaultTabbar").$$render($$result, { active: "Controls" }, {}, {})}
 
-<div class="${"drawer-container svelte-qdtyr1"}">${validate_component(Drawer, "Drawer").$$render($$result, {}, {}, {
+<div class="${"drawer-container svelte-1ye5j9e"}">${validate_component(Drawer, "Drawer").$$render($$result, {}, {}, {
     default: () => {
       return `${validate_component(Content, "Content").$$render($$result, {}, {}, {
         default: () => {
           return `${validate_component(List, "List").$$render($$result, {}, {}, {
             default: () => {
-              return `${validate_component(Item, "Item").$$render($$result, { href: "javascript:void(0)" }, {}, {
+              return `${validate_component(Item, "Item").$$render($$result, {
+                href: "javascript:void(0)",
+                style: "background-color: #EBAC0E; "
+              }, {}, {
                 default: () => {
-                  return `${validate_component(Text, "Text").$$render($$result, {}, {}, {
+                  return `${validate_component(Text, "Text").$$render($$result, { style: "color: #000000;" }, {}, {
                     default: () => {
                       return `Re-calibrate models`;
                     }
@@ -223,18 +226,17 @@ const Controls = create_ssr_component(($$result, $$props, $$bindings, slots) => 
 
 	${validate_component(AppContent, "AppContent").$$render($$result, { class: "app-content" }, {}, {
     default: () => {
-      return `<div class="${"main-content svelte-qdtyr1"}">Console Output<br class="${"svelte-qdtyr1"}">
-
+      return `<div class="${"main-content svelte-1ye5j9e"}">Console Output<br class="${"svelte-1ye5j9e"}">
 			${function(__value) {
         if (is_promise(__value)) {
           __value.then(null, noop);
           return `
-				<pre class="${"svelte-qdtyr1"}">Loading...</pre>
+				<pre class="${"svelte-1ye5j9e"}">Loading...</pre>
 			`;
         }
         return function() {
           return `
-				<pre class="${"svelte-qdtyr1"}">${escape(script_output)}</pre>
+				<pre class="${"svelte-1ye5j9e"}">${escape(script_output)}</pre>
 			`;
         }();
       }(run_script)}</div>`;

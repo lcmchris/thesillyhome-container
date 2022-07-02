@@ -1,4 +1,4 @@
-import { c as create_ssr_component } from "../../chunks/index-f5246ab7.js";
+import { c as create_ssr_component } from "../../chunks/index-3c4e05aa.js";
 async function load() {
   return { status: 302, redirect: "/Controls" };
 }

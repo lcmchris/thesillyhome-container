@@ -1,5 +1,5 @@
-import { c as create_ssr_component, a as compute_rest_props, g as get_current_component, b as spread, d as escape_attribute_value, f as escape_object, h as add_attribute, v as validate_component } from "../../chunks/index-f5246ab7.js";
-import { f as forwardEventsBuilder, c as classMap, a as classAdderBuilder, D as Div, H as H5, b as H6, d as DefaultTabbar } from "../../chunks/classAdderBuilder-56fb7b9f.js";
+import { c as create_ssr_component, a as compute_rest_props, g as get_current_component, b as spread, d as escape_attribute_value, f as escape_object, h as add_attribute, v as validate_component } from "../../chunks/index-3c4e05aa.js";
+import { f as forwardEventsBuilder, c as classMap, a as classAdderBuilder, D as Div, H as H5, b as H6, d as DefaultTabbar } from "../../chunks/classAdderBuilder-ba67c6d2.js";
 import "@material/tab-bar";
 import "@material/tab-scroller";
 import "@material/dom";
@@ -68,14 +68,14 @@ var Subtitle = classAdderBuilder({
 });
 var About_Us_svelte_svelte_type_style_lang = "";
 const css = {
-  code: "div.svelte-1kq6d1d{margin:100px 100px 100px 100px}",
+  code: "div.svelte-ptzpgd{margin:25px 25px 25px 25px}",
   map: null
 };
 const Aboutu20Us = create_ssr_component(($$result, $$props, $$bindings, slots) => {
   $$result.css.add(css);
   return `${validate_component(DefaultTabbar, "DefaultTabbar").$$render($$result, { active: "About Us" }, {}, {})}
 
-<div class="${"paper-container svelte-1kq6d1d"}">${validate_component(Paper, "Paper").$$render($$result, {}, {}, {
+<div class="${"paper-container svelte-ptzpgd"}">${validate_component(Paper, "Paper").$$render($$result, {}, {}, {
     default: () => {
       return `${validate_component(Title, "Title").$$render($$result, {}, {}, {
         default: () => {
@@ -85,7 +85,7 @@ const Aboutu20Us = create_ssr_component(($$result, $$props, $$bindings, slots) =
 		${validate_component(Subtitle, "Subtitle").$$render($$result, {}, {}, {})}
 		${validate_component(Content, "Content").$$render($$result, {}, {}, {
         default: () => {
-          return `If you like this please visit ---
+          return `If you like this please visit us at
 			<a href="${"https://thesillyhome.com/"}">The Silly Home</a>`;
         }
       })}`;

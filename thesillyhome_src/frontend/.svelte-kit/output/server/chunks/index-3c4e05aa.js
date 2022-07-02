@@ -12,6 +12,16 @@ function blank_object() {
 function run_all(fns) {
   fns.forEach(run);
 }
+function safe_not_equal(a, b) {
+  return a != a ? b == b : a !== b || (a && typeof a === "object" || typeof a === "function");
+}
+function subscribe(store, ...callbacks) {
+  if (store == null) {
+    return noop;
+  }
+  const unsub = store.subscribe(...callbacks);
+  return unsub.unsubscribe ? () => unsub.unsubscribe() : unsub;
+}
 function compute_rest_props(props, keys) {
   const rest = {};
   keys = new Set(keys);
@@ -19,6 +29,17 @@ function compute_rest_props(props, keys) {
     if (!keys.has(k) && k[0] !== "$")
       rest[k] = props[k];
   return rest;
+}
+function compute_slots(slots) {
+  const result = {};
+  for (const key in slots) {
+    result[key] = true;
+  }
+  return result;
+}
+function set_store_value(store, ret, value) {
+  store.set(value);
+  return ret;
 }
 function listen(node, event, handler, options) {
   node.addEventListener(event, handler, options);
@@ -228,4 +249,4 @@ function add_attribute(name, value, boolean) {
 function style_object_to_string(style_object) {
   return Object.keys(style_object).filter((key) => style_object[key]).map((key) => `${key}: ${style_object[key]};`).join(" ");
 }
-export { compute_rest_props as a, spread as b, create_ssr_component as c, escape_attribute_value as d, escape as e, escape_object as f, get_current_component as g, add_attribute as h, bubble as i, stop_propagation as j, each as k, listen as l, missing_component as m, globals as n, getContext as o, prevent_default as p, onDestroy as q, is_promise as r, setContext as s, noop as t, validate_component as v };
+export { compute_rest_props as a, spread as b, create_ssr_component as c, escape_attribute_value as d, escape as e, escape_object as f, get_current_component as g, add_attribute as h, bubble as i, stop_propagation as j, each as k, listen as l, missing_component as m, globals as n, getContext as o, prevent_default as p, onDestroy as q, is_promise as r, setContext as s, noop as t, safe_not_equal as u, validate_component as v, subscribe as w, set_store_value as x, compute_slots as y };

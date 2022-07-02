@@ -1,9 +1,9 @@
 export const manifest = {
 	appDir: "_app",
-	assets: new Set(["favicon.svg","icons/light_icon.svg","smui-dark.css","smui.css"]),
-	mimeTypes: {".svg":"image/svg+xml",".css":"text/css"},
+	assets: new Set(["data/light.bathroom_lights_tree.png","data/light.bedroom_ceiling_light_tree.png","data/light.bedroom_sidetable_lamp_tree.png","data/light.corridor_lights_tree.png","data/switch.livingroom_entrance_switch_center_tree.png","data/switch.livingroom_entrance_switch_left_tree.png","data/switch.livingroom_entrance_switch_right_tree.png","favicon.svg","icons/light_icon.svg","smui-dark.css","smui.css"]),
+	mimeTypes: {".png":"image/png",".svg":"image/svg+xml",".css":"text/css"},
 	_: {
-		entry: {"file":"start-dba1e4f5.js","js":["start-dba1e4f5.js","chunks/index-718d9243.js"],"css":[]},
+		entry: {"file":"start-4cfb7b03.js","js":["start-4cfb7b03.js","chunks/index-e02e635c.js","chunks/index-3e58225d.js"],"css":[]},
 		nodes: [
 			() => import('./nodes/0.js'),
 			() => import('./nodes/1.js'),
@@ -56,6 +56,14 @@ export const manifest = {
 				shadow: () => import('./entries/endpoints/Dashboard.ts.js'),
 				a: [0,5],
 				b: [1]
+			},
+			{
+				type: 'endpoint',
+				id: "api/ImageFetch",
+				pattern: /^\/api\/ImageFetch\/?$/,
+				names: [],
+				types: [],
+				load: () => import('./entries/endpoints/api/ImageFetch.ts.js')
 			}
 		],
 		matchers: async () => {

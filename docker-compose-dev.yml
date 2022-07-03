@@ -16,3 +16,4 @@ services:
       - thesillyhome_config:/thesillyhome_src/data/config/
     ports:
       - 2300:2300
+      - 3000:3000

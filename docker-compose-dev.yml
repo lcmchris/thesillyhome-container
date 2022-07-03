@@ -1,0 +1,19 @@
+volumes:
+  thesillyhome_config:
+    name: thesillyhome_config
+  ignore:
+    name: ignore
+
+services:
+  thesillyhome:
+    container_name: thesillyhome
+    image: lcmchris1/thesillyhome-container:dev
+    restart: unless-stopped
+    volumes:
+      - .\thesillyhome_src\appdaemon\apps\:/thesillyhome_src/appdaemon/apps/
+      - .\thesillyhome_src\startup\:/thesillyhome_src/startup/
+      - .\thesillyhome_src\thesillyhome\:/thesillyhome_src/thesillyhome/
+      - thesillyhome_config:/thesillyhome_src/data/config/
+    ports:
+      - "2300:2300"
+      - "3000:3000"

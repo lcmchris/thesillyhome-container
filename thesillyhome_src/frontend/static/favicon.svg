@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   preserveAspectRatio="xMidYMid"
+   width="2000"
+   height="2000"
+   viewBox="0 0 2000 2000"
+   version="1.1"
+   id="svg14"
+   sodipodi:docname="Logo_final_favicon.svg"
+   inkscape:export-filename="G:\My Drive\The Silly Home\Marketing material\Logo_final_fb_favicon.png"
+   inkscape:export-xdpi="170.39"
+   inkscape:export-ydpi="170.39"
+   inkscape:version="1.1.2 (b8e25be833, 2022-02-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <metadata
+     id="metadata18">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="1920"
+     inkscape:window-height="1017"
+     id="namedview16"
+     showgrid="false"
+     inkscape:zoom="0.26155672"
+     inkscape:cx="1137.4206"
+     inkscape:cy="584.95916"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g847"
+     scale-x="1e-05"
+     inkscape:document-rotation="0"
+     inkscape:pagecheckerboard="0" />
+  <defs
+     id="defs4">
+    <style
+       id="style2">
+      .cls-1 {
+        fill: #000;
+      }
+
+      .cls-1, .cls-2 {
+        fill-rule: evenodd;
+      }
+
+      .cls-2 {
+        fill: #ebac0e;
+      }
+    </style>
+  </defs>
+  <g
+     id="g847"
+     transform="translate(658.31401,266.23882)">
+    <circle
+       style="fill:#fdffff;fill-opacity:1;stroke-width:1.17687"
+       id="path6121"
+       cx="341.46912"
+       cy="733.54437"
+       r="992.1366" />
+    <g
+       id="g5670">
+      <path
+         d="m 767.19481,1596.5637 c 71.6413,-71.6473 107.48457,-169.713 107.48457,-294.1688 V 663.14525 c 0,-124.45577 -35.84327,-222.48718 -107.48457,-294.16788 C 695.50828,297.33007 598.41017,261.49228 475.85524,261.49228 H 232.6008 c -122.60026,0 -219.211884,35.83779 -289.925387,107.48509 -70.713493,71.6807 -106.070203,169.71211 -106.070203,294.16788 v 639.24965 c 0,124.4558 35.35671,222.5215 106.070203,294.1688 70.713503,71.6807 167.325127,107.4842 289.925387,107.4842 h 243.25444 c 122.55493,0 219.65304,-35.8035 291.33957,-107.4842 z M 45.917137,1504.6362 C 0.66053259,1456.5511 -21.967787,1388.2185 -21.967787,1299.567 V 665.97398 c 0,-88.61884 22.62831959,-156.98408 67.884924,-205.06916 C 91.173816,412.81976 157.15798,388.7768 243.91498,388.7768 h 220.62608 c 86.71175,0 153.1824,24.04296 199.41204,72.12802 46.18439,48.08508 69.2993,116.45032 69.2993,205.06916 V 1299.567 c 0,88.6515 -23.11491,156.9841 -69.2993,205.0692 -46.22964,48.0851 -112.70029,72.1271 -199.41204,72.1271 H 243.91498 c -86.757,0 -152.741164,-24.042 -197.997843,-72.1271 z"
+         class="cls-2"
+         id="path8"
+         style="stroke-width:5.65707" />
+      <path
+         d="m -247.04607,199.32094 -67.89059,-112.366167 688.0423,-317.684683 67.88503,112.36616 z"
+         class="cls-2"
+         id="path10"
+         style="stroke-width:5.65707" />
+      <path
+         d="M 288.14761,-119.61915 361.20885,-229.47965 986.25957,88.210183 913.19844,198.07067 Z"
+         class="cls-2"
+         id="path12"
+         style="stroke-width:5.65707" />
+    </g>
+  </g>
+</svg>

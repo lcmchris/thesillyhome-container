@@ -131,6 +131,8 @@ dmypy.json
 # png & pickle & csv
 *.csv
 *.pickle
+*.pkl
 *.png
-*.json
-secrets.yaml
+*.log
+thesillyhome_src/frontend/node_modules
+thesillyhome_src/frontend/static/data/*

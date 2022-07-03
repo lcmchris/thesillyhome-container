@@ -12,14 +12,13 @@
 	let precision = '		';
 	let recall = '			';
 
-	async function getFileTime(path) {
+	async function getImage(path) {
 		const query = new URLSearchParams();
 		query.set('path', String(path));
-
-		console.log('Fetchign');
-		const response = await fetch(`/api/FileUpdateTime/?${query.toString()}`);
-		const time = await response.json();
-		return time;
+		const response = await fetch(`/api/GetImage/?${query.toString()}`);
+		const image = await response.json();
+		console.log(image.message);
+		return image.message;
 	}
 </script>
 
@@ -71,19 +70,23 @@
 				</Row>
 			</Body>
 		</DataTable>
-
-		<div class="container">
-			<input type="checkbox" id="zoomCheck" />
-			{#if actuator != 'No value'}
-				<label for="zoomCheck">
-					<img
-						src="/data/{actuator}_tree.png?m={getFileTime(`./static/data/${actuator}_tree.png`)}"
-						alt={actuator}
-						style="width: 100%;height: 100%"
-					/>
-				</label>
-			{/if}
-		</div>
+		{#if actuator != 'No value'}
+			{#await getImage(`/thesillyhome_src/frontend/static/data/${actuator}_tree.png`)}
+				<p>...waiting</p>
+			{:then imageData}
+				<div class="container">
+					<input type="checkbox" id="zoomCheck" />
+					<label for="zoomCheck">
+						<img
+							src="data:image/png;base64, {imageData}
+						"
+							alt={actuator}
+							style="width: 100%;height: 100%"
+						/>
+					</label>
+				</div>
+			{/await}
+		{/if}
 	</Cell>
 </LayoutGrid>
 

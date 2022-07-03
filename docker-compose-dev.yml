@@ -15,5 +15,5 @@ services:
       - .\thesillyhome_src\thesillyhome\:/thesillyhome_src/thesillyhome/
       - thesillyhome_config:/thesillyhome_src/data/config/
     ports:
-      - 2300:2300
-      - 3000:3000
+      - "2300:2300"
+      - "3000:3000"

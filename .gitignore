@@ -133,5 +133,6 @@ dmypy.json
 *.pickle
 *.pkl
 *.png
+*.log
 thesillyhome_src/frontend/node_modules
-thesillyhome_src/frontend/static/data
+thesillyhome_src/frontend/static/data/*

@@ -29,14 +29,14 @@ def parallelize_dataframe(df1, df2, devices, func):
 
 
 def add_device_states(df_output: pd.DataFrame, df_states: pd.DataFrame, devices, pbar):
-    '''
+    """
     Convert dataframe to:
     act_state, last_state, sen_state1, sen_state2...
 
     1) add last_state for entity_id
     2) add duplicate state
-    3) add latest states of all sensors 
-    '''
+    3) add latest states of all sensors
+    """
 
     for index, row in df_output.iterrows():
         # get last states (for non-float for now)
@@ -76,8 +76,7 @@ def add_device_states(df_output: pd.DataFrame, df_states: pd.DataFrame, devices,
             ]
 
             if not previous_device_state.empty:
-                df_output.loc[index,
-                              device] = previous_device_state["state"].iloc[0]
+                df_output.loc[index, device] = previous_device_state["state"].iloc[0]
             else:
                 if device in tsh_config.float_sensors:
                     df_output.loc[index, device] = 0
@@ -128,8 +127,7 @@ def parse_data_from_db():
     logging.info("Reading from homedb...")
     df_all = homedb().get_data()
     df_all = convert_unavailabe(df_all)
-    assert ~df_all["state"].isnull().values.any(
-    ), df_all[df_all["state"].isnull()]
+    assert ~df_all["state"].isnull().values.any(), df_all[df_all["state"].isnull()]
 
     logging.info("Add previous state...")
     devices = actuators + sensors
@@ -140,8 +138,7 @@ def parse_data_from_db():
 
     logging.info("Start parallelization processing...")
 
-    df_output = parallelize_dataframe(
-        df_output, df_states, devices, add_device_states)
+    df_output = parallelize_dataframe(df_output, df_states, devices, add_device_states)
 
     """
     Code to add one hot encoding for date time.
@@ -153,31 +150,36 @@ def parse_data_from_db():
     )
     df_output = df_output.drop(columns=["last_updated"])
 
-    '''
+    """
     feature list extraction
-    '''
+    """
     output_list = tsh_config.output_list.copy()
     output_list.append("duplicate")
     feature_list = sorted(list(set(df_output.columns) - set(output_list)))
 
-    '''
+    """
     Hot encoding for all columns bar float_sensors which has int format
-    '''
+    """
     float_sensors = tsh_config.float_sensors
     for feature in feature_list:
         if feature not in float_sensors:
             df_output = one_hot_encoder(df_output, feature)
 
-    '''
+    """
     Output and checks
-    '''
+    """
     df_output["state"] = np.where(df_output["state"] == "on", 1, 0)
 
     assert df_output[df_output["entity_id"] == ""].empty
     assert ~df_output.isnull().values.any()
     assert ~df_output.isin([np.inf, -np.inf, np.nan]).values.any()
 
-    df_output.to_csv(
-        f"{tsh_config.data_dir}/parsed/act_states.csv", index=True, index_label="index"
-    )
+    dtype_dict = {}
+    for col in list(df_output.columns):
+        if col == "entity_id":
+            dtype_dict[col] = "object"
+        else:
+            dtype_dict[col] = "int8"
+    df_output = df_output.astype(dtype_dict)
+
     df_output.to_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")

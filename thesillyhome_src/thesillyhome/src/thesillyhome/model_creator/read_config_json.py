@@ -23,10 +23,6 @@ db_type = db_options["db_type"]
 db_host = db_options["db_host"]
 db_port = db_options["db_port"]
 
-model_name = "Base"
-model_version = "0.0.0"
-model_name_version = f"{model_name}_{model_version}"
-
 
 def extract_float_sensors(sensors: list):
     float_sensors_types = ["lux"]

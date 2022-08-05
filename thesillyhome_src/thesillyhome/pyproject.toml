@@ -6,7 +6,7 @@ authors = ["Chrisopher Lai"]
 license = "Apache 2.0"
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = ">=3.9,<3.11"
 mysql-connector = "2.2.9"
 tqdm = "4.64.0"
 joblib = "1.1.0"
@@ -16,7 +16,7 @@ pandas = "1.4.2"
 scikit-learn = "1.1.1"
 psycopg2 = "2.9.3"
 matplotlib = "3.5.2"
-lightgbm = "3.3.2"
+scipy = "1.8.1"
 
 [tool.poetry.dev-dependencies]
 

@@ -7,7 +7,6 @@ from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from lightgbm import LGBMClassifier
 
 from sklearn.metrics import precision_recall_curve
 
@@ -70,10 +69,6 @@ def train_all_actuator_models():
         },
         "RandomForestClassifier": {
             "classifier": RandomForestClassifier,
-            "model_kwargs": {},
-        },
-        "LGBMClassifier": {
-            "classifier": LGBMClassifier,
             "model_kwargs": {},
         },
         "SVMClassifier": {
@@ -140,13 +135,17 @@ def train_all_actuator_models():
             metrics_matrix,
             feature_list,
         )
-    
+
     df_metrics_matrix = pd.DataFrame(metrics_matrix)
     df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
 
     best_metrics_matrix = df_metrics_matrix.fillna(0)
-    best_metrics_matrix = df_metrics_matrix.sort_values('best_optimizer',ascending=False).drop_duplicates(subset=['actuator'],keep='first')
-    best_metrics_matrix.to_json("/thesillyhome_src/frontend/static/data/metrics_matrix.json",orient = "records")
+    best_metrics_matrix = df_metrics_matrix.sort_values(
+        "best_optimizer", ascending=False
+    ).drop_duplicates(subset=["actuator"], keep="first")
+    best_metrics_matrix.to_json(
+        "/thesillyhome_src/frontend/static/data/metrics_matrix.json", orient="records"
+    )
 
     logging.info("Completed!")
 

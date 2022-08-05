@@ -25,7 +25,6 @@ if __name__ == "__main__":
 
     actuators = tsh_config.actuators
     sensors = tsh_config.sensors
-    model_name_version = tsh_config.model_name_version
     tsh_config.replace_yaml()
     parse_data_from_db()
     train_all_actuator_models()

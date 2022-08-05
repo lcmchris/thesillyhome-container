@@ -1,6 +1,5 @@
 # Library imports
 import os
-import subprocess
 import pandas as pd
 
 from sklearn.model_selection import train_test_split
@@ -10,7 +9,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from lightgbm import LGBMClassifier
 
-from sklearn.metrics import precision_recall_curve, roc_curve
+from sklearn.metrics import precision_recall_curve
 
 import sys
 
@@ -28,7 +27,7 @@ import thesillyhome.model_creator.read_config_json as tsh_config
 def save_visual_tree(model, actuator, feature_vector):
     # plot tree
     plt.figure(figsize=(12, 12))  # set plot size (denoted in inches)
-    plot_tree(model, fontsize=10, feature_names=feature_vector)
+    plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=5)
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
 
@@ -83,18 +82,8 @@ def train_all_actuator_models():
         },
     }
 
-    df_metrics = pd.DataFrame(
-        columns=[
-            "classifier",
-            "actuator",
-            "accuracy",
-            "precision",
-            "recall",
-        ]
-    )
     # Adding metrics matrix
     metrics_matrix = []
-    df_metrics_all = []
 
     for actuator in actuators:
         logging.info(f"Training model for {actuator}")
@@ -148,14 +137,17 @@ def train_all_actuator_models():
             y_train,
             y_test,
             sample_weight,
-            df_metrics,
-            df_metrics_all,
+            metrics_matrix,
             feature_list,
         )
-        pd.concat(df_metrics_all).to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
+    
+    df_metrics_matrix = pd.DataFrame(metrics_matrix)
+    df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
 
-    with open(f"/thesillyhome_src/frontend/static/data/metrics_matrix.json", "w") as fp:
-        json.dump(metrics_matrix, fp)
+    best_metrics_matrix = df_metrics_matrix.fillna(0)
+    best_metrics_matrix = df_metrics_matrix.sort_values('best_optimizer',ascending=False).drop_duplicates(subset=['actuator'],keep='first')
+    best_metrics_matrix.to_json("/thesillyhome_src/frontend/static/data/metrics_matrix.json",orient = "records")
+
     logging.info("Completed!")
 
 
@@ -167,8 +159,7 @@ def train_all_classifiers(
     y_train,
     y_test,
     sample_weight,
-    df_metrics,
-    df_metrics_all,
+    metrics_matrix,
     feature_list,
 ):
     """ """
@@ -221,7 +212,7 @@ def train_all_classifiers(
 
         metrics_json = {}
         metrics_json["actuator"] = actuator
-        metrics_json["classifier"] = model_vars["classifier"]
+        metrics_json["classifier_name"] = model_name
         metrics_json["accuracy"] = accuracy_best
         metrics_json["precision"] = precision_best
         metrics_json["recall"] = recall_best
@@ -229,8 +220,7 @@ def train_all_classifiers(
         metrics_json["best_thresh"] = thresholds[ix]
         metrics_json["best_optimizer"] = optimizer[ix]
 
-        df_metrics_tmp = pd.DataFrame([metrics_json])
-        df_metrics = pd.concat([df_metrics, df_metrics_tmp])
+        metrics_matrix.append(metrics_json)
 
         # Save model to disk
         filename = open(f"{model_directory}/{model_name}.pkl", "wb")
@@ -241,9 +231,6 @@ def train_all_classifiers(
             best_model = optimizer[ix]
             filename = open(f"{model_directory}/best_model.pkl", "wb")
             pickle.dump(model, filename)
-
-    # Adding metrics dataframe
-    df_metrics_all.append(df_metrics)
 
     # plot
     plt.plot(

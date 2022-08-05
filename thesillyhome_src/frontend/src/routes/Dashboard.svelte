@@ -8,6 +8,7 @@
 	export let metrics;
 
 	let actuator = 'No value';
+	let classifier_name = 'No value';
 	let accuracy = 'Select the actuator';
 	let precision = '		';
 	let recall = '			';
@@ -31,6 +32,7 @@
 				<Item
 					on:SMUI:action={() => (
 						(actuator = metric.actuator),
+						(classifier_name = metric.classifier_name),
 						(accuracy = metric.accuracy),
 						(precision = metric.precision),
 						(recall = metric.recall)

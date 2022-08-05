@@ -1,3 +1,4 @@
+# Library imports
 import json
 import os
 
@@ -12,6 +13,7 @@ options = json.load(f)
 
 actuators = options["actuactors_id"]
 sensors = options["sensors_id"]
+devices = actuators + sensors
 db_options = options["db_options"][0]
 db_password = db_options["db_password"]
 db_database = db_options["db_database"]

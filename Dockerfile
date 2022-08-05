@@ -13,7 +13,7 @@ RUN \
     nodejs 
 
 ARG PIP_EXTRA_INDEX_URL=https://www.piwheels.org/simple
-RUN pip install --upgrade pip
+RUN pip3 install --upgrade pip
 RUN pip3 install setuptools==62.4.0
 RUN pip3 install -e /thesillyhome_src/thesillyhome/
 RUN pip3 install appdaemon==4.2.1

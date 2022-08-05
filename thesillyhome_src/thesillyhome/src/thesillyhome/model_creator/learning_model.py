@@ -1,11 +1,20 @@
 # Library imports
 import os
-import subprocess
 import pandas as pd
+
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier, plot_tree
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from lightgbm import LGBMClassifier
+
+from sklearn.metrics import precision_recall_curve
+
+import sys
+
 import numpy as np
-from sklearn.metrics import accuracy_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, auc
 import pickle
 import logging
 import json
@@ -15,18 +24,31 @@ import matplotlib.pyplot as plt
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 
-def save_visual_tree(model_tree, actuator, feature_vector):
+def save_visual_tree(model, actuator, feature_vector):
     # plot tree
     plt.figure(figsize=(12, 12))  # set plot size (denoted in inches)
-    plot_tree(model_tree, fontsize=10, feature_names=feature_vector)
+    plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=5)
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
+    plt.close()
 
 
-def train_model(model_name_version):
+# apply threshold to positive probabilities to create labels
+def to_labels(pos_probs, threshold):
+    return (pos_probs >= threshold).astype("int")
+
+
+def optimization_fucntion(precision, recall):
+    # convert to f score
+    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall)
+    # locate the index of the largest f score
+    ix = np.argmax(optimizer)
+    return ix, optimizer
+
+
+def train_all_actuator_models():
     """
     Train models for each actuator
     """
-
     actuators = tsh_config.actuators
 
     df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")
@@ -35,6 +57,30 @@ def train_model(model_name_version):
     # Generate feature and output vectors from act states.
     output_list = tsh_config.output_list.copy()
     act_list = list(set(df_act_states.columns) - set(output_list))
+
+    # Initialization
+    model_types = {
+        "DecisionTreeClassifier": {
+            "classifier": DecisionTreeClassifier,
+            "model_kwargs": {},
+        },
+        "LogisticRegression": {
+            "classifier": LogisticRegression,
+            "model_kwargs": {},
+        },
+        "RandomForestClassifier": {
+            "classifier": RandomForestClassifier,
+            "model_kwargs": {},
+        },
+        "LGBMClassifier": {
+            "classifier": LGBMClassifier,
+            "model_kwargs": {},
+        },
+        "SVMClassifier": {
+            "classifier": SVC,
+            "model_kwargs": {"probability": True},
+        },
+    }
 
     # Adding metrics matrix
     metrics_matrix = []
@@ -79,42 +125,141 @@ def train_model(model_name_version):
         y_train = y_train.drop(columns="duplicate")
         y_test = y_test.drop(columns="duplicate")
 
-        model_tree = DecisionTreeClassifier(random_state=99)
-        model_tree.fit(X_train, y_train, sample_weight=sample_weight)
+        if len(y_train) < 100:
+            logging.info("Training samples less than 100. Skipping")
+            continue
+
+        train_all_classifiers(
+            model_types,
+            actuator,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            sample_weight,
+            metrics_matrix,
+            feature_list,
+        )
+    
+    df_metrics_matrix = pd.DataFrame(metrics_matrix)
+    df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
+
+    best_metrics_matrix = df_metrics_matrix.fillna(0)
+    best_metrics_matrix = df_metrics_matrix.sort_values('best_optimizer',ascending=False).drop_duplicates(subset=['actuator'],keep='first')
+    best_metrics_matrix.to_json("/thesillyhome_src/frontend/static/data/metrics_matrix.json",orient = "records")
+
+    logging.info("Completed!")
+
+
+def train_all_classifiers(
+    model_types,
+    actuator,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    sample_weight,
+    metrics_matrix,
+    feature_list,
+):
+    """ """
+    logging.info(f"---Training samples = {len(y_train)}")
+
+    model_directory = f"{tsh_config.data_dir}/model/{actuator}"
+    os.makedirs(model_directory, exist_ok=True)
+
+    best_model = 0
+    for model_name, model_vars in model_types.items():
+        logging.info(f"---Running training for {model_name}")
+        logging.info(f"-----Model Kwargs = {model_vars['model_kwargs']}")
+
+        model = model_vars["classifier"](random_state=99, **model_vars["model_kwargs"])
+        model.fit(X_train, y_train, sample_weight=sample_weight)
 
         # Visualization of tress:
-        # tree_to_code(model_tree, feature_list)
-        save_visual_tree(model_tree, actuator, feature_list)
+        if model_name == "DecisionTreeClassifier":
+            save_visual_tree(model, actuator, feature_list)
 
         # Get predictions of model
-        y_tree_predictions = model_tree.predict(X_test)
+        y_predictions_proba = model.predict_proba(X_test)
 
-        # Extract predictions for each output variable and calculate accuracy and f1 score
-        accuracy = accuracy_score(y_test, y_tree_predictions)
-        precision = precision_score(y_test, y_tree_predictions)
-        recall = recall_score(y_test, y_tree_predictions)
+        # keep probabilities for the positive outcome only
+        y_predictions_proba = y_predictions_proba[:, 1]
+        # calculate roc curves
+        precision, recall, thresholds = precision_recall_curve(
+            y_test, y_predictions_proba
+        )
+
+        ix, optimizer = optimization_fucntion(precision, recall)
+        auc_ = auc(recall, precision)
+
+        # plot the roc curve for the model
+        plt.plot(precision, recall, label=model_name, markevery=None)
+        plt.scatter(precision[ix], recall[ix], marker="o", label=f"{model_name}")
+
+        # axis labels
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.legend()
+        # show the plot
+
+        y_predictions_best = to_labels(y_predictions_proba, thresholds[ix])
+
+        # # Extract predictions for each output variable and calculate accuracy and f1 score
+        accuracy_best = accuracy_score(y_test, y_predictions_best)
+        precision_best = precision_score(y_test, y_predictions_best)
+        recall_best = recall_score(y_test, y_predictions_best)
 
         metrics_json = {}
         metrics_json["actuator"] = actuator
-        metrics_json["accuracy"] = accuracy
-        metrics_json["precision"] = precision
-        metrics_json["recall"] = recall
+        metrics_json["classifier_name"] = model_name
+        metrics_json["accuracy"] = accuracy_best
+        metrics_json["precision"] = precision_best
+        metrics_json["recall"] = recall_best
+        metrics_json["AUC"] = auc_
+        metrics_json["best_thresh"] = thresholds[ix]
+        metrics_json["best_optimizer"] = optimizer[ix]
 
         metrics_matrix.append(metrics_json)
 
-        logging.info(
-            f"{actuator} accuracy score: {accuracy * 100}" + "\n"
-            f"{actuator} precision score: {precision * 100}" + "\n"
-            f"{actuator} recall score: {recall * 100}"
-        )
+        # Save model to disk
+        filename = open(f"{model_directory}/{model_name}.pkl", "wb")
+        pickle.dump(model, filename)
 
         # Save model to disk
-        model_directory = f"{tsh_config.data_dir}/model/{model_name_version}"
-        os.makedirs(model_directory, exist_ok=True)
+        if optimizer[ix] > best_model:
+            best_model = optimizer[ix]
+            filename = open(f"{model_directory}/best_model.pkl", "wb")
+            pickle.dump(model, filename)
 
-        filename = open(f"{model_directory}/{actuator}.pickle", "wb")
-        pickle.dump(model_tree, filename)
+    # plot
+    plt.plot(
+        [0, 1],
+        [y_train.sum() / len(y_train), y_train.sum() / len(y_train)],
+        linestyle="--",
+        label="No Skill",
+    )
+    plt.savefig(f"{tsh_config.data_dir}/model/{actuator}/precision_recall.jpg")
+    plt.savefig(
+        f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png"
+    )
+    plt.close()
 
-    with open(f"/thesillyhome_src/frontend/static/data/metrics_matrix.json", "w") as fp:
-        json.dump(metrics_matrix, fp)
-    logging.info("Completed!")
+
+if __name__ == "__main__":
+    FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    logging.basicConfig(
+        filename="/thesillyhome_src/log/thesillyhome.log",
+        encoding="utf-8",
+        level=logging.INFO,
+        format=FORMAT,
+    )
+    root = logging.getLogger()
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(FORMAT)
+    handler.setFormatter(formatter)
+    root.addHandler(handler)
+    train_all_actuator_models()

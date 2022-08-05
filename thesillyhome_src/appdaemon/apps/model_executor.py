@@ -20,7 +20,6 @@ import thesillyhome.model_creator.read_config_json as tsh_config
 
 class ModelExecutor(hass.Hass):
     def initialize(self):
-        self.model_name_version = tsh_config.model_name_version
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
@@ -193,11 +192,9 @@ class ModelExecutor(hass.Hass):
         actuators = tsh_config.actuators
         act_model_set = {}
         for act in actuators:
-            if os.path.isfile(
-                f"/thesillyhome_src/data/model/{self.model_name_version}/{act}.pickle"
-            ):
+            if os.path.isfile(f"/thesillyhome_src/data/model/{act}/best_model.pkl"):
                 with open(
-                    f"/thesillyhome_src/data/model/{self.model_name_version}/{act}.pickle",
+                    f"/thesillyhome_src/data/model/{act}/best_model.pkl",
                     "rb",
                 ) as pickle_file:
                     content = pickle.load(pickle_file)

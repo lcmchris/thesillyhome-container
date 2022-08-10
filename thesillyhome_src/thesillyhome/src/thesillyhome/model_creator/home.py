@@ -96,8 +96,8 @@ class homedb:
     def connect_external_db(self):
         host = "thesillyhomedb.cluster-cdioawtidgpj.eu-west-2.rds.amazonaws.com"
         port = 3306
-        user = "admin"
-        password = "cEfHZ7p9H9Uk2wG"
+        user = "thesillyhome_general"
+        password = "has123:ASldfa.$"
         database = "thesillyhomedb"
         extdb = create_engine(
             f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}", echo=False

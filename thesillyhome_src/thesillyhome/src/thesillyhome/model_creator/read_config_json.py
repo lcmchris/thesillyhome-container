@@ -64,3 +64,6 @@ def replace_yaml():
         with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "w") as file:
             file.write(content)
         return
+
+
+share_data = True

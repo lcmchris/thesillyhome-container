@@ -13,7 +13,7 @@ services:
       - .\thesillyhome_src\appdaemon\apps\:/thesillyhome_src/appdaemon/apps/
       - .\thesillyhome_src\startup\:/thesillyhome_src/startup/
       - .\thesillyhome_src\thesillyhome\:/thesillyhome_src/thesillyhome/
-      - .\thesillyhome_src\frontend\src\:/thesillyhome_src/thesillyhome/src/
+      - .\thesillyhome_src\frontend\src\:/thesillyhome_src/frontend/src/
       - thesillyhome_config:/thesillyhome_src/data/config/
     ports:
       - "2300:2300"

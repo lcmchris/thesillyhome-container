@@ -218,6 +218,8 @@ def train_all_classifiers(
         metrics_json["AUC"] = auc_
         metrics_json["best_thresh"] = thresholds[ix]
         metrics_json["best_optimizer"] = optimizer[ix]
+        metrics_json["model_enabled"] = True
+
 
         metrics_matrix.append(metrics_json)
 

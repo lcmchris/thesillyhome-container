@@ -4,6 +4,8 @@
 	import List, { Item, Graphic, Text, PrimaryText, SecondaryText } from '@smui/list';
 	import LayoutGrid, { Cell } from '@smui/layout-grid';
 	import DataTable, { Head, Body, Row, Cell as DataCell } from '@smui/data-table';
+	import Switch from '@smui/switch';
+	import { loop_guard } from 'svelte/internal';
 
 	export let metrics;
 
@@ -18,7 +20,6 @@
 		query.set('path', String(path));
 		const response = await fetch(`/api/GetImage/?${query.toString()}`);
 		const image = await response.json();
-		console.log(image.message);
 		return image.message;
 	}
 </script>
@@ -27,7 +28,7 @@
 
 <LayoutGrid>
 	<Cell>
-		<List class="act-list" twoLine avatarList singleSelection>
+		<List class="act-list" threeLine avatarList singleSelection>
 			{#each metrics as metric}
 				<Item
 					on:SMUI:action={() => (
@@ -40,7 +41,13 @@
 					disabled={metric.disabled}
 					selected={actuator === metric.actuator}
 				>
+					<Switch
+						bind:checked={metric.model_enabled}
+						on:SMUISwitch:change={() => console.log(metric.model_enabled)}
+					/>
+
 					<Graphic style="background-image: url(/icons/light_icon.svg)" />
+
 					<Text>
 						<PrimaryText>{metric.actuator}</PrimaryText>
 						<SecondaryText>Accuracy = {metric.accuracy}</SecondaryText>

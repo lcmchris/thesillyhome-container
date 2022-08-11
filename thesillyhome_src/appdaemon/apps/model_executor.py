@@ -13,6 +13,7 @@ import sqlite3 as sql
 import pytz
 import numpy as np
 import time
+import json
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -21,6 +22,7 @@ import thesillyhome.model_creator.read_config_json as tsh_config
 class ModelExecutor(hass.Hass):
     def initialize(self):
         self.handle = self.listen_state(self.state_handler)
+        self.enabled_actuators = self.read_actuators()
         self.act_model_set = self.load_models()
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
         self.last_states = self.get_state()
@@ -28,6 +30,15 @@ class ModelExecutor(hass.Hass):
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
+
+    def read_actuators():
+        enabled_actuators = {}
+        with open('/thesillyhome_src/frontend/static/data/metrics_matrix.json', 'r') as f:
+            metrics_data = json.load(f)
+        for metric in metrics_data:
+            if metric['model_enabled']:
+                enabled_actuators.add(metric['actuator'])
+        return enabled_actuators
 
     def init_db(self):
         """
@@ -54,7 +65,6 @@ class ModelExecutor(hass.Hass):
         feature_list = self.get_new_feature_list(feature_list, "hour_")
         feature_list = self.get_new_feature_list(feature_list, "last_state_")
         feature_list = self.get_new_feature_list(feature_list, "weekday_")
-
         feature_list = self.get_new_feature_list(feature_list, "switch")
 
         return feature_list

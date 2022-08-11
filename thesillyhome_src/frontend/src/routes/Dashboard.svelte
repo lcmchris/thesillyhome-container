@@ -5,7 +5,6 @@
 	import LayoutGrid, { Cell } from '@smui/layout-grid';
 	import DataTable, { Head, Body, Row, Cell as DataCell } from '@smui/data-table';
 	import Switch from '@smui/switch';
-	import { loop_guard } from 'svelte/internal';
 
 	export let metrics;
 
@@ -21,6 +20,18 @@
 		const response = await fetch(`/api/GetImage/?${query.toString()}`);
 		const image = await response.json();
 		return image.message;
+	}
+
+	async function update_enable(data) {
+		console.log('Saving to file');
+		console.log(data);
+		await fetch('/api/UpdateMetricsJson', {
+			method: 'POST',
+			body: JSON.stringify(data),
+			headers: {
+				'Content-Type': 'application/json'
+			}
+		});
 	}
 </script>
 
@@ -43,7 +54,7 @@
 				>
 					<Switch
 						bind:checked={metric.model_enabled}
-						on:SMUISwitch:change={() => console.log(metric.model_enabled)}
+						on:SMUISwitch:change={async () => await update_enable(metrics)}
 					/>
 
 					<Graphic style="background-image: url(/icons/light_icon.svg)" />

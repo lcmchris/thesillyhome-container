@@ -19,6 +19,7 @@ matplotlib = "3.5.2"
 scipy = "1.8.1"
 SQLAlchemy = "1.4.40"
 black = "22.6.0"
+PyMySQL = "1.0.2"
 
 [tool.poetry.dev-dependencies]
 

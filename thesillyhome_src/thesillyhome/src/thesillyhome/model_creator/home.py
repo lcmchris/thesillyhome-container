@@ -1,9 +1,6 @@
 # Library imports
-from cmath import exp
 from datetime import datetime
-from select import select
 import string
-from time import ctime
 import mysql.connector
 import psycopg2
 import pandas as pd
@@ -94,10 +91,10 @@ class homedb:
         return df
 
     def connect_external_db(self):
-        host = "thesillyhomedb.cluster-cdioawtidgpj.eu-west-2.rds.amazonaws.com"
+        host = "thesillyhomedb-instance-1.cdioawtidgpj.eu-west-2.rds.amazonaws.com"
         port = 3306
         user = "thesillyhome_general"
-        password = "has123:ASldfa.$"
+        password = "aspperqj14827"
         database = "thesillyhomedb"
         extdb = create_engine(
             f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}", echo=False
@@ -108,14 +105,13 @@ class homedb:
 
         user_id, last_update_time = self.get_user_info()
         df["user_id"] = user_id
-
+        logging.info(last_update_time)
         df = df[df["last_updated"] > last_update_time]
         if not df.empty:
             df.to_sql(name="states", con=self.extdb, if_exists="append")
             logging.info(f"Data updloaded.")
-
-            c_time = df["last_updated"].max()
-            self.update_last_update_time(user_id, c_time)
+            max_time = df["last_updated"].max()
+            self.update_last_update_time(user_id, max_time)
 
     def get_user_info(self):
         # here we use the mac address as a dummy, this is used for now until an actual login system
@@ -135,7 +131,15 @@ class homedb:
         if len(myresult) == 1:
             last_update_time = myresult[0][0]
         else:
+            # Add user if none
+
             last_update_time = datetime(1900, 1, 1, 0, 0, 0, 0)
+
+            query = f"INSERT INTO thesillyhomedb.users (user_id,last_update_time)\
+                    VALUES ('{user_id}','{last_update_time}');"
+            with self.extdb.connect() as connection:
+                connection.execute(query)
+
 
         return user_id, last_update_time
 

@@ -13,6 +13,7 @@ import sqlite3 as sql
 import pytz
 import numpy as np
 import time
+import json
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -28,6 +29,18 @@ class ModelExecutor(hass.Hass):
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
+
+    def read_actuators(self):
+        enabled_actuators = set()
+        with open(
+            "/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r"
+        ) as f:
+            metrics_data = json.load(f)
+        for metric in metrics_data:
+            if metric["model_enabled"]:
+                enabled_actuators.add(metric["actuator"])
+        self.log(f"Enabled Actuators: {enabled_actuators}")
+        return enabled_actuators
 
     def init_db(self):
         """
@@ -54,7 +67,6 @@ class ModelExecutor(hass.Hass):
         feature_list = self.get_new_feature_list(feature_list, "hour_")
         feature_list = self.get_new_feature_list(feature_list, "last_state_")
         feature_list = self.get_new_feature_list(feature_list, "weekday_")
-
         feature_list = self.get_new_feature_list(feature_list, "switch")
 
         return feature_list
@@ -228,6 +240,7 @@ class ModelExecutor(hass.Hass):
         devices = actuators + sensors
         now = datetime.datetime.now()
 
+
         if entity in devices:
             self.log(f"\n")
             self.log(f"<--- {entity} is {new} --->")
@@ -278,6 +291,8 @@ class ModelExecutor(hass.Hass):
                 )
                 all_rules = all_rules.drop(columns=["index"])
 
+
+            enabled_actuators = self.read_actuators()
             if entity in actuators:
                 # Adding rules
                 new_rule = df_sen_states.copy()
@@ -294,32 +309,34 @@ class ModelExecutor(hass.Hass):
             # Execute all models for sensor and set states
             if entity in sensors:
                 for act, model in self.act_model_set.items():
+                    if act in enabled_actuators:
+                        self.log(f"Prediction sequence for: {act}")
 
-                    self.log(f"Prediction sequence for: {act}")
+                        # the actuators feature state should not affect the model and also the duplicate column
+                        df_sen_states_less = df_sen_states[
+                            self.get_new_feature_list(feature_list, act)
+                        ]
 
-                    # the actuators feature state should not affect the model and also the duplicate column
-                    df_sen_states_less = df_sen_states[
-                        self.get_new_feature_list(feature_list, act)
-                    ]
+                        prediction = model.predict(df_sen_states_less)
 
-                    prediction = model.predict(df_sen_states_less)
+                        rule_to_verify = df_sen_states_less.copy()
+                        rule_to_verify = rule_to_verify[
+                            self.unverified_features(rule_to_verify.columns.values.tolist())
+                        ]
+                        rule_to_verify["entity_id"] = act
 
-                    rule_to_verify = df_sen_states_less.copy()
-                    rule_to_verify = rule_to_verify[
-                        self.unverified_features(rule_to_verify.columns.values.tolist())
-                    ]
-                    rule_to_verify["entity_id"] = act
-
-                    if self.verify_rules(act, rule_to_verify, prediction, all_rules):
-                        # Execute actions
-                        self.log(f"---Predicted {act} as {prediction}", level="INFO")
-                        if (prediction == 1) and (all_states[act]["state"] != "on"):
-                            self.log(f"---Turn on {act}")
-                            self.turn_on(act)
-                        elif (prediction == 0) and (all_states[act]["state"] != "off"):
-                            self.log(f"---Turn off {act}")
-                            self.turn_off(act)
-                        else:
-                            self.log(f"---{act} state has not changed.")
+                        if self.verify_rules(act, rule_to_verify, prediction, all_rules):
+                            # Execute actions
+                            self.log(f"---Predicted {act} as {prediction}", level="INFO")
+                            if (prediction == 1) and (all_states[act]["state"] != "on"):
+                                self.log(f"---Turn on {act}")
+                                self.turn_on(act)
+                            elif (prediction == 0) and (all_states[act]["state"] != "off"):
+                                self.log(f"---Turn off {act}")
+                                self.turn_off(act)
+                            else:
+                                self.log(f"---{act} state has not changed.")
+                    else:
+                        self.log("Ignore Disabled actuator")
 
             self.last_states = self.get_state()

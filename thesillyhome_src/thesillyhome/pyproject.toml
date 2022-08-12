@@ -17,6 +17,8 @@ scikit-learn = "1.1.1"
 psycopg2 = "2.9.3"
 matplotlib = "3.5.2"
 scipy = "1.8.1"
+SQLAlchemy = "1.4.40"
+black = "22.6.0"
 
 [tool.poetry.dev-dependencies]
 

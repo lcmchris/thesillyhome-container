@@ -126,6 +126,9 @@ def parse_data_from_db():
 
     logging.info("Reading from homedb...")
     df_all = homedb().get_data()
+    df_all = df_all[['entity_id','state','last_updated']]
+
+
     df_all = convert_unavailabe(df_all)
     assert ~df_all["state"].isnull().values.any(), df_all[df_all["state"].isnull()]
 
@@ -183,3 +186,7 @@ def parse_data_from_db():
     df_output = df_output.astype(dtype_dict)
 
     df_output.to_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")
+
+
+if __name__ == "__main__":
+    parse_data_from_db()

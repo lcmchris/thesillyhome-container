@@ -66,6 +66,10 @@ def replace_yaml():
             file.write(content)
         return
 
+if "share_data" in options:
+    share_data = options["share_data"]
+else:
+  share_data = True
 
 def run_cron():
 

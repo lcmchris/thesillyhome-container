@@ -28,3 +28,4 @@ if __name__ == "__main__":
     tsh_config.replace_yaml()
     parse_data_from_db()
     train_all_actuator_models()
+    tsh_config.run_cron()

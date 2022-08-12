@@ -1,6 +1,8 @@
 # Library imports
+import subprocess
 import json
 import os
+import logging
 
 data_dir = "/thesillyhome_src/data"
 
@@ -41,7 +43,6 @@ output_list_dup = ["entity_id", "state", "last_updated", "duplicate"]
 
 
 def replace_yaml():
-
     if os.environ.get("HA_ADDON") == "true":
         with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "r") as f:
             content = f.read()
@@ -65,5 +66,32 @@ def replace_yaml():
             file.write(content)
         return
 
+if "share_data" in options:
+    share_data = options["share_data"]
+else:
+  share_data = True
 
-share_data = True
+def run_cron():
+
+    if "autotrain" in options:
+        autotrain = options["autotrain"]
+    else:
+        autotrain = "true"
+    if "autotrain_cadence" in options:
+        autotrain_cadence = options["autotrain_cadence"]
+    else:
+        # default every sunday
+        autotrain_cadence = "0 0 * * 0"
+
+    if autotrain == "true":
+        with open("/thesillyhome_src/startup/crontab", "r") as f:
+            content = f.read()
+            content = content.replace("<autotrain_cadence>", autotrain_cadence)
+        with open("/thesillyhome_src/startup/crontab", "w") as file:
+            file.write(content)
+
+        subprocess.run(["crontab", "/thesillyhome_src/startup/crontab"])
+        logging.info(f"Runnining cron with cadence {autotrain_cadence}")
+        return
+    else:
+        return

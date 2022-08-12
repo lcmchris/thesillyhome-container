@@ -10,7 +10,8 @@ RUN \
     build-essential \
     libffi-dev \
     libpq-dev \
-    nodejs 
+    nodejs \
+    cron
 
 ARG PIP_EXTRA_INDEX_URL=https://www.piwheels.org/simple
 RUN pip3 install --upgrade pip

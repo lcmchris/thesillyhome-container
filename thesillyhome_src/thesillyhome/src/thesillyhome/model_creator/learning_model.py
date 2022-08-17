@@ -1,4 +1,5 @@
 # Library imports
+from cmath import exp
 import os
 import pandas as pd
 
@@ -7,7 +8,6 @@ from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-
 from sklearn.metrics import precision_recall_curve
 
 import sys
@@ -16,7 +16,6 @@ import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, auc
 import pickle
 import logging
-import json
 import matplotlib.pyplot as plt
 
 # Local application imports
@@ -38,7 +37,9 @@ def to_labels(pos_probs, threshold):
 
 def optimization_fucntion(precision, recall):
     # convert to f score
-    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall)
+    epsilon = 0.01
+    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
+
     # locate the index of the largest f score
     ix = np.argmax(optimizer)
     return ix, optimizer
@@ -65,7 +66,7 @@ def train_all_actuator_models():
         },
         "LogisticRegression": {
             "classifier": LogisticRegression,
-            "model_kwargs": {},
+            "model_kwargs": {"max_iter": 10000},
         },
         "RandomForestClassifier": {
             "classifier": RandomForestClassifier,
@@ -105,9 +106,7 @@ def train_all_actuator_models():
         # Split into random training and test set
         X = feature_vector
         y = output_vector
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=170
-        )
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
 
         # # Weighting more recent observations more. 3 times if in top 50 percent
         sample_weight = np.ones(len(X_train))
@@ -172,8 +171,11 @@ def train_all_classifiers(
         logging.info(f"---Running training for {model_name}")
         logging.info(f"-----Model Kwargs = {model_vars['model_kwargs']}")
 
-        model = model_vars["classifier"](random_state=99, **model_vars["model_kwargs"])
-        model.fit(X_train, y_train, sample_weight=sample_weight)
+        model = model_vars["classifier"](**model_vars["model_kwargs"])
+        try:
+            model.fit(X_train, y_train, sample_weight=sample_weight)
+        except:
+            continue
 
         # Visualization of tress:
         if model_name == "DecisionTreeClassifier":
@@ -219,7 +221,6 @@ def train_all_classifiers(
         metrics_json["best_thresh"] = thresholds[ix]
         metrics_json["best_optimizer"] = optimizer[ix]
         metrics_json["model_enabled"] = True
-
 
         metrics_matrix.append(metrics_json)
 

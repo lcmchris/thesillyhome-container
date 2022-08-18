@@ -220,8 +220,13 @@ def train_all_classifiers(
         metrics_json["AUC"] = auc_
         metrics_json["best_thresh"] = thresholds[ix]
         metrics_json["best_optimizer"] = optimizer[ix]
-        metrics_json["model_enabled"] = True
-
+        if precision_best > 0.7:
+            metrics_json["model_enabled"] = True
+        else:
+            logging.info(
+                f"Model disabled for {actuator}. Precision {precision_best} below 0.7."
+            )
+            metrics_json["model_enabled"] = False
         metrics_matrix.append(metrics_json)
 
         # Save model to disk

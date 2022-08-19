@@ -38,7 +38,7 @@ f = Fernet(b"w2PWqacy0_e4XZ2Zb8BU6GauyRgiZXw12wbmi0A6CjQ=")
 password = f.decrypt(
     b"gAAAAABi_2EebCwQSA3Lbk3MPCXvH3I6G-w8Ijt0oYiqfmUdzdrMjVRQuTqbpqK-DQCsyVliUWFsvd1NulF-WBsLKOpwmiCp-w=="
 ).decode("utf-8")
-extdb_password = db_options["db_password"]
+extdb_password = password
 extdb_database = "thesillyhomedb"
 extdb_username = "thesillyhome_general"
 extdb_host = "thesillyhomedb-instance-1.cdioawtidgpj.eu-west-2.rds.amazonaws.com"

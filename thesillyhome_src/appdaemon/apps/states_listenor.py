@@ -13,12 +13,14 @@ import uuid
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 
+
 class StatesListenor(hass.Hass):
     def initialize(self):
         self.extdb = self.connect_external_db()
         self.handle = self.listen_state(self.state_handler)
         self.loop = self.periodic_log_state_daemon()
         self.user = hex(uuid.getnode())
+
 
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome state listenor fully initialized!")

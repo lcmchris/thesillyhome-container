@@ -5,9 +5,11 @@ import mysql.connector
 import psycopg2
 import pandas as pd
 import os.path
+import os
 import logging
 import uuid
 from sqlalchemy import create_engine
+
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -91,11 +93,11 @@ class homedb:
         return df
 
     def connect_external_db(self):
-        host = "thesillyhomedb-instance-1.cdioawtidgpj.eu-west-2.rds.amazonaws.com"
-        port = 3306
-        user = "thesillyhome_general"
-        password = "aspperqj14827"
-        database = "thesillyhomedb"
+        host = tsh_config.extdb_host
+        port = tsh_config.extdb_port
+        user = tsh_config.extdb_username
+        password = tsh_config.extdb_password
+        database = tsh_config.extdb_database
         extdb = create_engine(
             f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}", echo=False
         )
@@ -139,7 +141,6 @@ class homedb:
                     VALUES ('{user_id}','{last_update_time}');"
             with self.extdb.connect() as connection:
                 connection.execute(query)
-
 
         return user_id, last_update_time
 

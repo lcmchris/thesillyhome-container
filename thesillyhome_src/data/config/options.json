@@ -39,5 +39,8 @@
             "ha_url": "http://192.168.1.100:8123",
             "ha_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiI5Y2Q4MzQ5ZjNlOTA0ZGVjOGRhMTFmZWVjMDEzYjA4ZiIsImlhdCI6MTY1NDU4ODY3MCwiZXhwIjoxOTY5OTQ4NjcwfQ.DGOdEqbi_HujDZ-Xh16UiKyWCtBl2rdbQ6yl-7peLs4"
         }
-    ]
+    ],
+    "share_data": true,
+    "autotrain": true,
+    "autotrain_cadence": "0 0 * * 0"
 }

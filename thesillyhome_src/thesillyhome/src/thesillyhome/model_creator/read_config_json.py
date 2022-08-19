@@ -3,6 +3,8 @@ import subprocess
 import json
 import os
 import logging
+from cryptography.fernet import Fernet
+
 
 data_dir = "/thesillyhome_src/data"
 
@@ -13,6 +15,7 @@ else:
 
 options = json.load(f)
 
+# Mandatory
 actuators = options["actuactors_id"]
 sensors = options["sensors_id"]
 devices = actuators + sensors
@@ -21,11 +24,28 @@ db_password = db_options["db_password"]
 db_database = db_options["db_database"]
 db_username = db_options["db_username"]
 db_type = db_options["db_type"]
-
 db_host = db_options["db_host"]
 db_port = db_options["db_port"]
 
+# Defaults
+share_data = options.get("share_data", True)
+autotrain = options.get("autotrain", True)
+autotrain_cadence = options.get("autotrain_cadence", "0 0 * * 0")
 
+# Non-user config
+
+f = Fernet(b"w2PWqacy0_e4XZ2Zb8BU6GauyRgiZXw12wbmi0A6CjQ=")
+password = f.decrypt(
+    b"gAAAAABi_2EebCwQSA3Lbk3MPCXvH3I6G-w8Ijt0oYiqfmUdzdrMjVRQuTqbpqK-DQCsyVliUWFsvd1NulF-WBsLKOpwmiCp-w=="
+).decode("utf-8")
+extdb_password = db_options["db_password"]
+extdb_database = "thesillyhomedb"
+extdb_username = "thesillyhome_general"
+extdb_host = "thesillyhomedb-instance-1.cdioawtidgpj.eu-west-2.rds.amazonaws.com"
+extdb_port = 3306
+
+
+# Other helpers
 def extract_float_sensors(sensors: list):
     float_sensors_types = ["lux"]
     float_sensors = []
@@ -66,24 +86,9 @@ def replace_yaml():
             file.write(content)
         return
 
-if "share_data" in options:
-    share_data = options["share_data"]
-else:
-  share_data = True
 
 def run_cron():
-
-    if "autotrain" in options:
-        autotrain = options["autotrain"]
-    else:
-        autotrain = "true"
-    if "autotrain_cadence" in options:
-        autotrain_cadence = options["autotrain_cadence"]
-    else:
-        # default every sunday
-        autotrain_cadence = "0 0 * * 0"
-
-    if autotrain == "true":
+    if autotrain == True:
         with open("/thesillyhome_src/startup/crontab", "r") as f:
             content = f.read()
             content = content.replace("<autotrain_cadence>", autotrain_cadence)

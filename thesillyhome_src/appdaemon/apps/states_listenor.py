@@ -7,6 +7,10 @@ import time
 import threading
 import json
 from datetime import datetime
+import uuid
+
+# Local application imports
+import thesillyhome.model_creator.read_config_json as tsh_config
 
 
 class StatesListenor(hass.Hass):
@@ -14,6 +18,7 @@ class StatesListenor(hass.Hass):
         self.extdb = self.connect_external_db()
         self.handle = self.listen_state(self.state_handler)
         self.loop = self.periodic_log_state_daemon()
+        self.user = hex(uuid.getnode())
 
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome state listenor fully initialized!")
@@ -28,6 +33,7 @@ class StatesListenor(hass.Hass):
                 "snapshot_time": str(datetime.now()),
                 "get_state_json": json.dumps(self.get_state()),
                 "type": "peri",
+                "user_id": self.user,
             }
             data = pd.DataFrame(data_export, index=[0])
             data.to_sql(
@@ -36,30 +42,13 @@ class StatesListenor(hass.Hass):
             time.sleep(5.0 - time.time() % 5.0)
 
     def state_handler(self, entity, attribute, old, new, kwargs):
-        devices = [
-            "light.corridor_lights",
-            "light.bathroom_lights",
-            "light.bedroom_ceiling_light",
-            "light.bedroom_sidetable_lamp",
-            "switch.livingroom_entrance_switch_right",
-            "switch.livingroom_entrance_switch_center",
-            "switch.livingroom_entrance_switch_left",
-            "binary_sensor.corridor_end_sensor_occupancy",
-            "binary_sensor.corridor_entrance_sensor_occupancy",
-            "binary_sensor.livingroom_desk_sensor_occupancy",
-            "binary_sensor.bedroom_entrance_sensor_occupancy",
-            "binary_sensor.bathroom_entrance_sensor_occupancy",
-            "binary_sensor.chris_phone_is_charging",
-            "binary_sensor.livingroom_deskchair_sensor_vibration",
-            "binary_sensor.livingroom_sofa_sensor_occupancy",
-            "sun.sun",
-            "weather.home",
-        ]
-        if entity in devices:
+
+        if entity in tsh_config.devices:
             data_export_event = {
                 "snapshot_time": str(datetime.now()),
                 "get_state_json": json.dumps(self.get_state()),
                 "type": "chng",
+                "user_id": self.user,
             }
             data_event = pd.DataFrame(data_export_event, index=[0])
             data_event.to_sql(
@@ -67,11 +56,11 @@ class StatesListenor(hass.Hass):
             )
 
     def connect_external_db(self):
-        host = "thesillyhomedb-instance-1.cdioawtidgpj.eu-west-2.rds.amazonaws.com"
-        port = 3306
-        user = "admin"
-        password = "vNwtmCh2NX5fm8B"
-        database = "thesillyhomedb"
+        host = tsh_config.extdb_host
+        port = tsh_config.extdb_port
+        user = tsh_config.extdb_username
+        password = tsh_config.extdb_password
+        database = tsh_config.extdb_database
         extdb = create_engine(
             f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}", echo=False
         )

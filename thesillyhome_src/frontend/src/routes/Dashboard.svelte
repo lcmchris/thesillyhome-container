@@ -61,7 +61,7 @@
 
 					<Text>
 						<PrimaryText>{metric.actuator}</PrimaryText>
-						<SecondaryText>Accuracy = {metric.accuracy}</SecondaryText>
+						<SecondaryText>Precision = {metric.precision}</SecondaryText>
 					</Text>
 				</Item>
 			{/each}

@@ -1,5 +1,4 @@
 # Library imports
-from pandas.core.frame import DataFrame
 import pandas as pd
 import numpy as np
 import copy
@@ -15,104 +14,58 @@ from thesillyhome.model_creator.home import homedb
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 
-def parallelize_dataframe(df1, df2, devices, func):
-    num_processes = cpu_count()
-    df_split = np.array_split(df1, num_processes)
+def get_current_states(df_output: pd.DataFrame) -> pd.DataFrame:
+    """
+    Returns pivoted frame of each state id desc
+    """
+    df_pivot = (
+        df_output.reset_index()
+        .pivot(index=["state_id"], columns=["entity_id"], values=["state"])
+        .sort_values(by="state_id", ascending=False)
+    )
+    df_pivot.columns = df_pivot.columns.droplevel(0)
+    df_pivot = df_pivot.fillna(method="bfill").fillna(method="ffill")
+    return df_pivot
 
-    with tqdm(total=df1.shape[0]) as pbar:
-        df_output = pd.concat(
-            Parallel(n_jobs=-1, prefer="threads")(
-                delayed(func)(split, df2, devices, pbar) for split in df_split
-            )
+
+def add_duplicate(df_output: pd.DataFrame) -> pd.DataFrame:
+
+    for entity in df_output["entity_id"].unique():
+        df_filtered = df_output[df_output["entity_id"] == entity]
+        df_shift = df_filtered.shift(-1)
+
+        df_output.loc[df_output["entity_id"] == entity, "duplicate"] = np.where(
+            df_filtered["state"] == df_shift["state"], 1, 3
         )
+
     return df_output
 
 
-def add_device_states(df_output: pd.DataFrame, df_states: pd.DataFrame, devices, pbar):
-    """
-    Convert dataframe to:
-    act_state, last_state, sen_state1, sen_state2...
-
-    1) add last_state for entity_id
-    2) add duplicate state
-    3) add latest states of all sensors
-    """
-
-    for index, row in df_output.iterrows():
-        # get last states (for non-float for now)
-        last_device_state = df_states[
-            (df_states["entity_id"].isin(devices))
-            & (df_states["entity_id"] != row["entity_id"])
-            & (df_states["last_updated"] < row["last_updated"])
-            & ~(df_states["entity_id"].isin(tsh_config.float_sensors))
-        ]
-
-        if not last_device_state.empty:
-            df_output.loc[
-                index, "last_state"
-            ] = f"{last_device_state['entity_id'].iloc[0]}_{last_device_state['state'].iloc[0]}"
-        else:
-            df_output.loc[index, "last_state"] = np.NaN
-
-        # Value actual state changes more!
-        last_current_device_state = df_states[
-            (df_states["entity_id"] == row["entity_id"])
-            & (df_states["last_updated"] < row["last_updated"])
-        ]
-
-        if not last_current_device_state.empty:
-            if last_current_device_state["state"].iloc[0] == row["state"]:
-                df_output.loc[index, "duplicate"] = 1
-            else:
-                df_output.loc[index, "duplicate"] = 3
-        else:
-            df_output.loc[index, "duplicate"] = 3
-
-        # Add device states to dataframe as columns
-        for device in devices:
-            previous_device_state = df_states[
-                (df_states["entity_id"] == device)
-                & (df_states["last_updated"] < row["last_updated"])
-            ]
-
-            if not previous_device_state.empty:
-                df_output.loc[index, device] = previous_device_state["state"].iloc[0]
-            else:
-                if device in tsh_config.float_sensors:
-                    df_output.loc[index, device] = 0
-                else:
-                    df_output.loc[index, device] = "off"
-        pbar.update(1)
-    return df_output
-
-
-def one_hot_encoder(df: DataFrame, column: str) -> DataFrame:
+def one_hot_encoder(df: pd.DataFrame, column: str) -> pd.DataFrame:
     one_hot = pd.get_dummies(df[column], prefix=column)
     df = df.drop(column, axis=1)
     df = df.join(one_hot)
     return df
 
 
-def convert_unavailabe(df: DataFrame) -> DataFrame:
+def convert_unavailabe(df: pd.DataFrame) -> pd.DataFrame:
     """
     The fact is if a device such as a light bulb is powered off,
     After a timeframe (availability_timeout), it is set to the 'unavailable' status
 
     ['entity_id','states']
     """
-    df["state"] = np.where(
+    conditions = [
         (df["entity_id"].isin(tsh_config.float_sensors))
         & (df["state"].isin([np.NaN, "unknown", "", "unavailable", None])),
-        0,
-        df["state"],
-    )
-    df["state"] = np.where(
         (~df["entity_id"].isin(tsh_config.float_sensors))
         & (df["state"].isin([np.NaN, "unknown", "", "unavailable", None])),
-        "off",
-        df["state"],
-    )
-    return df
+    ]
+
+    choices = [0, "off"]
+    df["state"] = np.select(conditions, choices, default=df["state"])
+
+    return df["state"]
 
 
 def parse_data_from_db():
@@ -121,27 +74,25 @@ def parse_data_from_db():
     To create a valid ML classification case, we will parse all last
     sensor states for each actuator event and append it to the dataframe.
     """
-    actuators = tsh_config.actuators
-    sensors = tsh_config.sensors
 
     logging.info("Reading from homedb...")
     df_all = homedb().get_data()
-    df_all = df_all[['entity_id','state','last_updated']]
+    df_all = df_all[["entity_id", "state", "last_updated"]]
 
-
-    df_all = convert_unavailabe(df_all)
+    df_all["state"] = convert_unavailabe(df_all)
     assert ~df_all["state"].isnull().values.any(), df_all[df_all["state"].isnull()]
 
-    logging.info("Add previous state...")
-    devices = actuators + sensors
-    df_states = df_all[df_all["entity_id"].isin(devices)]
-    df_act_states = df_all[df_all["entity_id"].isin(actuators)]
+    df_all = df_all[df_all["entity_id"].isin(tsh_config.devices)]
 
-    df_output = copy.deepcopy(df_act_states)
+    logging.info("Add previous state...")
+    df_act_states = df_all[df_all["entity_id"].isin(tsh_config.actuators)]
 
     logging.info("Start parallelization processing...")
 
-    df_output = parallelize_dataframe(df_output, df_states, devices, add_device_states)
+    df_current_states = get_current_states(df_all)
+    df_output = df_act_states.join(df_current_states, on="state_id")
+
+    df_output = add_duplicate(df_output)
 
     """
     Code to add one hot encoding for date time.
@@ -163,9 +114,8 @@ def parse_data_from_db():
     """
     Hot encoding for all columns bar float_sensors which has int format
     """
-    float_sensors = tsh_config.float_sensors
     for feature in feature_list:
-        if feature not in float_sensors:
+        if feature not in tsh_config.float_sensors:
             df_output = one_hot_encoder(df_output, feature)
 
     """
@@ -175,7 +125,7 @@ def parse_data_from_db():
 
     assert df_output[df_output["entity_id"] == ""].empty
     assert ~df_output.isnull().values.any()
-    assert ~df_output.isin([np.inf, -np.inf, np.nan]).values.any()
+    assert ~df_output.isin([np.inf, -np.inf, np.NaN]).values.any()
 
     dtype_dict = {}
     for col in list(df_output.columns):
@@ -184,6 +134,7 @@ def parse_data_from_db():
         else:
             dtype_dict[col] = "int8"
     df_output = df_output.astype(dtype_dict)
+    print(len(df_output))
 
     df_output.to_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")
 

@@ -11,3 +11,4 @@ matplotlib==3.5.2
 sqlalchemy==1.4.40
 pymysql==1.0.2
 black==22.6.0
+cryptography==37.0.4

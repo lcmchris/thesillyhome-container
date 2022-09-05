@@ -1,7 +1,3 @@
 model_executor:
   module: model_executor
   class: ModelExecutor
-
-states_listenor:
-  module: states_listenor
-  class: StatesListenor

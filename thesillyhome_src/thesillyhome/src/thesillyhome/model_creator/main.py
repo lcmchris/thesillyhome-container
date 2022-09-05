@@ -5,9 +5,14 @@ from thesillyhome.model_creator.parse_data import parse_data_from_db
 from thesillyhome.model_creator.learning_model import train_all_actuator_models
 import logging
 import sys
+import os.path
 
 if __name__ == "__main__":
     FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    if os.path.isfile(f"/thesillyhome_src/log/thesillyhome.log"):
+        with open("/thesillyhome_src/log/thesillyhome.log", "w"):
+            pass
 
     logging.basicConfig(
         filename="/thesillyhome_src/log/thesillyhome.log",

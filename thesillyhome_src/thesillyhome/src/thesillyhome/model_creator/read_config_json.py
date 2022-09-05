@@ -41,7 +41,7 @@ password = f.decrypt(
 extdb_password = password
 extdb_database = "thesillyhomedb"
 extdb_username = "thesillyhome_general"
-extdb_host = "thesillyhomedb-instance-1.cdioawtidgpj.eu-west-2.rds.amazonaws.com"
+extdb_host = "thesillyhomedb.cluster-cdioawtidgpj.eu-west-2.rds.amazonaws.com"
 extdb_port = 3306
 
 

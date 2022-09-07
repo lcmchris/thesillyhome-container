@@ -134,7 +134,6 @@ def parse_data_from_db():
         else:
             dtype_dict[col] = "int8"
     df_output = df_output.astype(dtype_dict)
-    print(len(df_output))
 
     df_output.to_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")
 

@@ -69,7 +69,7 @@ class homedb:
                     state_id,\
                     entity_id  ,\
                     state  ,\
-                    if(last_changed is NULL,last_updated,last_changed) as last_changed  ,\
+                    last_changed  ,\
                     last_updated  ,\
                     old_state_id \
                 from states ORDER BY last_updated DESC;"
@@ -84,6 +84,7 @@ class homedb:
         df = pd.DataFrame.from_dict(myresult)
         df.columns = col_names
 
+        # Preprocessing
         df = df.set_index("state_id")
 
         df.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")

@@ -204,9 +204,9 @@ class ModelExecutor(hass.Hass):
         actuators = tsh_config.actuators
         act_model_set = {}
         for act in actuators:
-            if os.path.isfile(f"/thesillyhome_src/data/model/{act}/best_model.pkl"):
+            if os.path.isfile(f"{tsh_config.data_dir}/model/{act}/best_model.pkl"):
                 with open(
-                    f"/thesillyhome_src/data/model/{act}/best_model.pkl",
+                    f"{tsh_config.data_dir}/model/{act}/best_model.pkl",
                     "rb",
                 ) as pickle_file:
                     content = pickle.load(pickle_file)
@@ -218,7 +218,7 @@ class ModelExecutor(hass.Hass):
     def get_base_columns(self):
         # Get feature list from parsed data header, set all columns to 0
         base_columns = pd.read_pickle(
-            "/thesillyhome_src/data/parsed/act_states.pkl"
+            f"{tsh_config.data_dir}/parsed/act_states.pkl"
         ).columns
         base_columns = sorted(
             list(set(base_columns) - set(["entity_id", "state", "duplicate"]))
@@ -239,7 +239,6 @@ class ModelExecutor(hass.Hass):
         float_sensors = tsh_config.float_sensors
         devices = actuators + sensors
         now = datetime.datetime.now()
-
 
         if entity in devices:
             self.log(f"\n")
@@ -291,7 +290,6 @@ class ModelExecutor(hass.Hass):
                 )
                 all_rules = all_rules.drop(columns=["index"])
 
-
             enabled_actuators = self.read_actuators()
             if entity in actuators:
                 # Adding rules
@@ -321,17 +319,25 @@ class ModelExecutor(hass.Hass):
 
                         rule_to_verify = df_sen_states_less.copy()
                         rule_to_verify = rule_to_verify[
-                            self.unverified_features(rule_to_verify.columns.values.tolist())
+                            self.unverified_features(
+                                rule_to_verify.columns.values.tolist()
+                            )
                         ]
                         rule_to_verify["entity_id"] = act
 
-                        if self.verify_rules(act, rule_to_verify, prediction, all_rules):
+                        if self.verify_rules(
+                            act, rule_to_verify, prediction, all_rules
+                        ):
                             # Execute actions
-                            self.log(f"---Predicted {act} as {prediction}", level="INFO")
+                            self.log(
+                                f"---Predicted {act} as {prediction}", level="INFO"
+                            )
                             if (prediction == 1) and (all_states[act]["state"] != "on"):
                                 self.log(f"---Turn on {act}")
                                 self.turn_on(act)
-                            elif (prediction == 0) and (all_states[act]["state"] != "off"):
+                            elif (prediction == 0) and (
+                                all_states[act]["state"] != "off"
+                            ):
                                 self.log(f"---Turn off {act}")
                                 self.turn_off(act)
                             else:

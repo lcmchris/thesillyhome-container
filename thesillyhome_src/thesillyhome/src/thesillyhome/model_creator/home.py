@@ -29,37 +29,39 @@ class homedb:
         self.database = tsh_config.db_database
         self.db_type = tsh_config.db_type
         self.share_data = tsh_config.share_data
+        self.from_cache = False
         self.mydb = self.connect_internal_db()
         self.extdb = self.connect_external_db()
 
     def connect_internal_db(self):
-        if self.db_type == "mariadb":
-            mydb = mysql.connector.connect(
-                host=self.host,
-                port=self.port,
-                user=self.username,
-                password=self.password,
-                database=self.database,
-            )
+        if not self.from_cache:
+            if self.db_type == "mariadb":
+                mydb = mysql.connector.connect(
+                    host=self.host,
+                    port=self.port,
+                    user=self.username,
+                    password=self.password,
+                    database=self.database,
+                )
 
-        elif self.db_type == "postgres":
-            mydb = psycopg2.connect(
-                host=self.host,
-                port=self.port,
-                user=self.username,
-                password=self.password,
-                database=self.database,
-            )
+            elif self.db_type == "postgres":
+                mydb = psycopg2.connect(
+                    host=self.host,
+                    port=self.port,
+                    user=self.username,
+                    password=self.password,
+                    database=self.database,
+                )
+            else:
+                logging.info("DB type is mariadb or postgres.")
+            return mydb
         else:
-            logging.info("DB type is mariadb or postgres.")
-        return mydb
+            return None
 
-    def get_data(self, from_cache=False):
+    def get_data(self):
         logging.info("Getting data from internal homeassistant db")
 
-        if from_cache and os.path.exists(
-            f"{tsh_config.data_dir}/parsed/all_states.pkl"
-        ):
+        if self.from_cache:
             logging.info("Using cached all_states.pkl")
             return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
 

@@ -98,6 +98,7 @@ def parse_data_from_db():
     Code to add one hot encoding for date time.
     This will help give features for time of day and day of the week.
     """
+    df_output["last_updated"] = pd.to_datetime(df_output["last_updated"])
     df_output["hour"] = df_output["last_updated"].dt.hour
     df_output["weekday"] = df_output["last_updated"].dt.date.apply(
         lambda x: x.weekday()

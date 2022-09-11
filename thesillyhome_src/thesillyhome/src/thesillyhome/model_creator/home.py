@@ -92,35 +92,43 @@ class homedb:
         #             old_state_id \
         #         from states ORDER BY last_updated DESC;"
 
-        query = f"CALL GetUserStates ('0x242ac120002');"
-        df_output = pd.DataFrame()
+        query = f"CALL GetUserStates ('0x242ac12000b');"
         with self.extdb.connect() as con:
+
+
             con = con.execution_options(stream_results=True)
-            for df in pd.read_sql(
+
+            list_df = [df for df in pd.read_sql(
                 query,
                 con=con,
                 index_col="state_id",
                 parse_dates=["last_changed", "last_updated"],
                 chunksize=1000,
-            ):
-                logging.info(f"Query completed with : {len(df)} rows")
-                df_output = pd.concat([df_output, df])
-
-        # mycursor = self.mydb.cursor()
-        # mycursor.execute(query)
-        # myresult = mycursor.fetchall()
+            )]
+            df_output = pd.concat(list_df)
+        # with self.extdb.connect() as con:
+        #     con = con.execution_options()
+        #     df = pd.read_sql(
+        #         query,
+        #         con=con,
+        #         index_col="state_id",
+        #         parse_dates=["last_changed", "last_updated"],
+        #     )
+        # mycursor = self.extdb
+        # result = mycursor.execute(query)
+        # myresult = result.fetchall()
         # logging.info("Query complete")
         # # Clean to DF
-        # col_names = []
-        # for elt in mycursor.description:
-        #     col_names.append(elt[0])
+        # # col_names = []
+        # # for elt in mycursor.description:
+        # #     col_names.append(elt[0])
         # df = pd.DataFrame.from_dict(myresult)
-        # df.columns = col_names
+        # # df.columns = col_names
 
         # # Preprocessing
         # df = df.set_index("state_id")
 
-        df.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
+        df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         if self.share_data:
             logging.info("Uploading data to external db. Thanks for sharing!")
             self.upload_data(df)

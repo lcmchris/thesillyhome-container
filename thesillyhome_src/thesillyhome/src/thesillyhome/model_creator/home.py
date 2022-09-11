@@ -9,7 +9,7 @@ import os
 import logging
 import uuid
 from sqlalchemy import create_engine
-
+from memory_profiler import profile
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -30,10 +30,26 @@ class homedb:
         self.db_type = tsh_config.db_type
         self.share_data = tsh_config.share_data
         self.from_cache = False
-        self.mydb = self.connect_internal_db()
+        # self.mydb = self.connect_internal_db()
         self.extdb = self.connect_external_db()
 
     def connect_internal_db(self):
+        if not self.from_cache:
+            if self.db_type == "mariadb":
+                mydb = create_engine(
+                    f"postgresql+psycopg2://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
+                    echo=False,
+                )
+            elif self.db_type == "postgres":
+                mydb = create_engine(
+                    f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
+                    echo=False,
+                )
+            else:
+                raise Exception(f"Invalid DB type : {self.db_type}.")
+        else:
+            return None
+
         if not self.from_cache:
             if self.db_type == "mariadb":
                 mydb = mysql.connector.connect(
@@ -58,39 +74,55 @@ class homedb:
         else:
             return None
 
+    @profile
     def get_data(self):
         logging.info("Getting data from internal homeassistant db")
 
         if self.from_cache:
             logging.info("Using cached all_states.pkl")
             return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
+        logging.info("Executing query")
 
-        query = f"SELECT \
-                    state_id,\
-                    entity_id  ,\
-                    state  ,\
-                    last_changed  ,\
-                    last_updated  ,\
-                    old_state_id \
-                from states ORDER BY last_updated DESC;"
-        mycursor = self.mydb.cursor()
-        mycursor.execute(query)
-        myresult = mycursor.fetchall()
+        # query = f"SELECT \
+        #             state_id,\
+        #             entity_id  ,\
+        #             state  ,\
+        #             last_changed  ,\
+        #             last_updated  ,\
+        #             old_state_id \
+        #         from states ORDER BY last_updated DESC;"
 
-        # Clean to DF
-        col_names = []
-        for elt in mycursor.description:
-            col_names.append(elt[0])
-        df = pd.DataFrame.from_dict(myresult)
-        df.columns = col_names
+        query = f"CALL GetUserStates ('0x242ac120002');"
+        df_output = pd.DataFrame()
+        with self.extdb.connect() as con:
+            con = con.execution_options(stream_results=True)
+            for df in pd.read_sql(
+                query,
+                con=con,
+                index_col="state_id",
+                parse_dates=["last_changed", "last_updated"],
+                chunksize=1000,
+            ):
+                logging.info(f"Query completed with : {len(df)} rows")
+                df_output = pd.concat([df_output, df])
 
-        # Preprocessing
-        df = df.set_index("state_id")
+        # mycursor = self.mydb.cursor()
+        # mycursor.execute(query)
+        # myresult = mycursor.fetchall()
+        # logging.info("Query complete")
+        # # Clean to DF
+        # col_names = []
+        # for elt in mycursor.description:
+        #     col_names.append(elt[0])
+        # df = pd.DataFrame.from_dict(myresult)
+        # df.columns = col_names
+
+        # # Preprocessing
+        # df = df.set_index("state_id")
 
         df.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         if self.share_data:
             logging.info("Uploading data to external db. Thanks for sharing!")
-
             self.upload_data(df)
         self.mydb.close()
         return df

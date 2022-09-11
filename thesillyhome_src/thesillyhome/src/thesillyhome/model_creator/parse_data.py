@@ -11,6 +11,7 @@ import logging
 
 # Local application imports
 from thesillyhome.model_creator.home import homedb
+from thesillyhome.model_creator.logger import add_logger
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 
@@ -140,4 +141,5 @@ def parse_data_from_db():
 
 
 if __name__ == "__main__":
+    add_logger()
     parse_data_from_db()

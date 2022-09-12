@@ -9,11 +9,12 @@ from cryptography.fernet import Fernet
 data_dir = "/thesillyhome_src/data"
 
 if os.environ.get("HA_ADDON") == "true":
-    f = open(f"/data/options.json")
+    config_file = open(f"/data/options.json")
 else:
-    f = open(f"/thesillyhome_src/data/config/options.json")
+    config_file = open(f"/thesillyhome_src/data/config/options.json")
 
-options = json.load(f)
+options = json.load(config_file)
+options_json = json.dumps(options)
 
 # Mandatory
 actuators = options["actuactors_id"]

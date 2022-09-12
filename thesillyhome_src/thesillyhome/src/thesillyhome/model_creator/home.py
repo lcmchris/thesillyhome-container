@@ -35,12 +35,12 @@ class homedb:
 
     def connect_internal_db(self):
         if not self.from_cache:
-            if self.db_type == "mariadb":
+            if self.db_type == "postgres":
                 mydb = create_engine(
                     f"postgresql+psycopg2://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
                     echo=False,
                 )
-            elif self.db_type == "postgres":
+            elif self.db_type == "mariadb":
                 mydb = create_engine(
                     f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
                     echo=False,
@@ -70,7 +70,14 @@ class homedb:
             return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         logging.info("Executing query")
 
-        query = f"CALL GetUserStates ('{self.user_id}');"
+        query = f"SELECT \
+                    state_id,\
+                    entity_id  ,\
+                    state  ,\
+                    last_changed  ,\
+                    last_updated  ,\
+                    old_state_id \
+                from states ORDER BY last_updated DESC LIMIT 100;"
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
             list_df = [
@@ -99,7 +106,7 @@ class homedb:
             df.to_sql(name="states", con=self.extdb, if_exists="append")
             logging.info(f"Data uploaded.")
             max_time = df["last_updated"].max()
-            self.update_last_update_time(max_time)
+            self.update_user(max_time)
         else:
             logging.info(f"Latest data already uploaded.")
 
@@ -118,6 +125,8 @@ class homedb:
 
         if len(myresult) == 1:
             last_update_time = myresult[0][0]
+            logging.info(f"User id exists, last_updated : {last_update_time}")
+
         else:
             # Add user if none
             last_update_time = datetime(1900, 1, 1, 0, 0, 0, 0)
@@ -129,9 +138,9 @@ class homedb:
 
         return last_update_time
 
-    def update_last_update_time(self, c_time: datetime):
-        logging.info(f"Updating user table with last_update_time {c_time}")
-        query = f"CALL UpdateUser ('{self.user_id}',{c_time})';"
+    def update_user(self, c_time: datetime):
+        logging.info(f"Updating user table with last_update_time {c_time} and config")
+        query = f"CALL UpdateUser ('{self.user_id}','{c_time}','{tsh_config.options_json}');"
 
         with self.extdb.connect() as connection:
             connection.execute(query)

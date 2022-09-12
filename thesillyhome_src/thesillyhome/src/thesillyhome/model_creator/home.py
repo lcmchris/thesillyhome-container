@@ -9,7 +9,6 @@ import os
 import logging
 import uuid
 from sqlalchemy import create_engine
-from memory_profiler import profile
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -30,8 +29,9 @@ class homedb:
         self.db_type = tsh_config.db_type
         self.share_data = tsh_config.share_data
         self.from_cache = False
-        # self.mydb = self.connect_internal_db()
+        self.mydb = self.connect_internal_db()
         self.extdb = self.connect_external_db()
+        self.user_id = tsh_config.db_database + "_" + hex(uuid.getnode())
 
     def connect_internal_db(self):
         if not self.from_cache:
@@ -47,93 +47,9 @@ class homedb:
                 )
             else:
                 raise Exception(f"Invalid DB type : {self.db_type}.")
-        else:
-            return None
-
-        if not self.from_cache:
-            if self.db_type == "mariadb":
-                mydb = mysql.connector.connect(
-                    host=self.host,
-                    port=self.port,
-                    user=self.username,
-                    password=self.password,
-                    database=self.database,
-                )
-
-            elif self.db_type == "postgres":
-                mydb = psycopg2.connect(
-                    host=self.host,
-                    port=self.port,
-                    user=self.username,
-                    password=self.password,
-                    database=self.database,
-                )
-            else:
-                logging.info("DB type is mariadb or postgres.")
             return mydb
         else:
             return None
-
-    @profile
-    def get_data(self):
-        logging.info("Getting data from internal homeassistant db")
-
-        if self.from_cache:
-            logging.info("Using cached all_states.pkl")
-            return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
-        logging.info("Executing query")
-
-        # query = f"SELECT \
-        #             state_id,\
-        #             entity_id  ,\
-        #             state  ,\
-        #             last_changed  ,\
-        #             last_updated  ,\
-        #             old_state_id \
-        #         from states ORDER BY last_updated DESC;"
-
-        query = f"CALL GetUserStates ('0x242ac12000b');"
-        with self.extdb.connect() as con:
-
-
-            con = con.execution_options(stream_results=True)
-
-            list_df = [df for df in pd.read_sql(
-                query,
-                con=con,
-                index_col="state_id",
-                parse_dates=["last_changed", "last_updated"],
-                chunksize=1000,
-            )]
-            df_output = pd.concat(list_df)
-        # with self.extdb.connect() as con:
-        #     con = con.execution_options()
-        #     df = pd.read_sql(
-        #         query,
-        #         con=con,
-        #         index_col="state_id",
-        #         parse_dates=["last_changed", "last_updated"],
-        #     )
-        # mycursor = self.extdb
-        # result = mycursor.execute(query)
-        # myresult = result.fetchall()
-        # logging.info("Query complete")
-        # # Clean to DF
-        # # col_names = []
-        # # for elt in mycursor.description:
-        # #     col_names.append(elt[0])
-        # df = pd.DataFrame.from_dict(myresult)
-        # # df.columns = col_names
-
-        # # Preprocessing
-        # df = df.set_index("state_id")
-
-        df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
-        if self.share_data:
-            logging.info("Uploading data to external db. Thanks for sharing!")
-            self.upload_data(df)
-        self.mydb.close()
-        return df
 
     def connect_external_db(self):
         host = tsh_config.extdb_host
@@ -146,27 +62,54 @@ class homedb:
         )
         return extdb
 
-    def upload_data(self, df: pd.DataFrame):
+    def get_data(self):
+        logging.info("Getting data from internal homeassistant db")
 
-        user_id, last_update_time = self.get_user_info()
-        df["user_id"] = user_id
-        logging.info(last_update_time)
+        if self.from_cache:
+            logging.info("Using cached all_states.pkl")
+            return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
+        logging.info("Executing query")
+
+        query = f"CALL GetUserStates ('{self.user_id}');"
+        with self.mydb.connect() as con:
+            con = con.execution_options(stream_results=True)
+            list_df = [
+                df
+                for df in pd.read_sql(
+                    query,
+                    con=con,
+                    index_col="state_id",
+                    parse_dates=["last_changed", "last_updated"],
+                    chunksize=1000,
+                )
+            ]
+            df_output = pd.concat(list_df)
+        df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
+        if self.share_data:
+            logging.info("Uploading data to external db. *Thanks for sharing!*")
+            self.upload_data(df_output)
+        return df_output
+
+    def upload_data(self, df: pd.DataFrame):
+        last_update_time = self.get_user_info()
+        df["user_id"] = self.user_id
+        logging.info(f"{self.user_id} in {last_update_time}")
         df = df[df["last_updated"] > last_update_time]
         if not df.empty:
             df.to_sql(name="states", con=self.extdb, if_exists="append")
-            logging.info(f"Data updloaded.")
+            logging.info(f"Data uploaded.")
             max_time = df["last_updated"].max()
-            self.update_last_update_time(user_id, max_time)
+            self.update_last_update_time(max_time)
+        else:
+            logging.info(f"Latest data already uploaded.")
 
     def get_user_info(self):
         # here we use the mac address as a dummy, this is used for now until an actual login system
-
-        user_id = hex(uuid.getnode())
-        logging.info(f"Using MAC address as user_id {user_id}")
+        logging.info(f"Using MAC address as user_id {self.user_id}")
 
         query = f"SELECT \
                     last_update_time \
-                from users where user_id = '{user_id}';"
+                from users where user_id = '{self.user_id}';"
 
         with self.extdb.connect() as connection:
             myresult = connection.execute(query).fetchall()
@@ -177,20 +120,19 @@ class homedb:
             last_update_time = myresult[0][0]
         else:
             # Add user if none
-
             last_update_time = datetime(1900, 1, 1, 0, 0, 0, 0)
 
-            query = f"INSERT INTO thesillyhomedb.users (user_id,last_update_time)\
-                    VALUES ('{user_id}','{last_update_time}');"
+            query = f"CALL CreateUser ('{self.user_id}','{last_update_time}');"
             with self.extdb.connect() as connection:
                 connection.execute(query)
+            logging.info(f"User id does not exist, creating new user: {self.user_id}")
 
-        return user_id, last_update_time
+        return last_update_time
 
-    def update_last_update_time(self, user_id: string, c_time: datetime):
+    def update_last_update_time(self, c_time: datetime):
         logging.info(f"Updating user table with last_update_time {c_time}")
-        query = f"UPDATE thesillyhomedb.users \
-                SET last_update_time = '{c_time}' \
-                WHERE user_id = '{user_id}';"
+        query = f"CALL UpdateUser ('{self.user_id}',{c_time})';"
+
         with self.extdb.connect() as connection:
             connection.execute(query)
+            logging.info(f"Updated user table with last_update_time {c_time}")

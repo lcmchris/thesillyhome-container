@@ -67,8 +67,8 @@ To install this container, run the following:
 ```
 git clone git@github.com:lcmchris/thesillyhome-container.git
 
-docker volume create thesillyhome
-# Find the path to volume
+docker volume create thesillyhome_config
+# Find the path to volume docker volume inspect thesillyhome_config or \\wsl$\docker-desktop-data\data\docker\volumes
 cp thesillyhome_src\data\config\options.json <path_to_volume>
 # Amend the copied options.json
 

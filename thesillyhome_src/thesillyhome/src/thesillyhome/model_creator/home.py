@@ -77,7 +77,7 @@ class homedb:
                     last_changed  ,\
                     last_updated  ,\
                     old_state_id \
-                from states ORDER BY last_updated DESC LIMIT 100;"
+                from states ORDER BY last_updated DESC;"
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
             list_df = [
@@ -93,18 +93,22 @@ class homedb:
             df_output = pd.concat(list_df)
         df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         if self.share_data:
-            logging.info("Uploading data to external db. *Thanks for sharing!*")
+            logging.info(
+                "Uploading data to external db. *Thanks for sharing!*")
             self.upload_data(df_output)
         return df_output
 
     def upload_data(self, df: pd.DataFrame):
         last_update_time = self.get_user_info()
         df["user_id"] = self.user_id
-        logging.info(f"{self.user_id} in {last_update_time}")
         df = df[df["last_updated"] > last_update_time]
         if not df.empty:
-            df.to_sql(name="states", con=self.extdb, if_exists="append")
-            logging.info(f"Data uploaded.")
+            logging.info(df)
+            try:
+                df.to_sql(name="states", con=self.extdb, if_exists="append")
+                logging.info(f"Data uploaded.")
+            except:
+                logging.warning(f"Duplicate Data found in db.")
             max_time = df["last_updated"].max()
             self.update_user(max_time)
         else:
@@ -118,30 +122,27 @@ class homedb:
                     last_update_time \
                 from users where user_id = '{self.user_id}';"
 
-        with self.extdb.connect() as connection:
+        with self.extdb.begin() as connection:
             myresult = connection.execute(query).fetchall()
-
-        assert len(myresult) in (0, 1)
 
         if len(myresult) == 1:
             last_update_time = myresult[0][0]
-            logging.info(f"User id exists, last_updated : {last_update_time}")
-
+            logging.info(
+                f"User id {self.user_id} exists, last_updated : {last_update_time}")
         else:
             # Add user if none
+            logging.info(
+                f"User id does not exist, creating new user: {self.user_id}")
             last_update_time = datetime(1900, 1, 1, 0, 0, 0, 0)
-
             query = f"CALL CreateUser ('{self.user_id}','{last_update_time}');"
-            with self.extdb.connect() as connection:
+            with self.extdb.begin() as connection:
                 connection.execute(query)
-            logging.info(f"User id does not exist, creating new user: {self.user_id}")
-
         return last_update_time
 
     def update_user(self, c_time: datetime):
-        logging.info(f"Updating user table with last_update_time {c_time} and config")
+        logging.info(
+            f"Updating user table with last_update_time {c_time} and config")
         query = f"CALL UpdateUser ('{self.user_id}','{c_time}','{tsh_config.options_json}');"
 
-        with self.extdb.connect() as connection:
+        with self.extdb.begin() as connection:
             connection.execute(query)
-            logging.info(f"Updated user table with last_update_time {c_time}")

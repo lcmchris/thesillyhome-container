@@ -93,8 +93,7 @@ class homedb:
             df_output = pd.concat(list_df)
         df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         if self.share_data:
-            logging.info(
-                "Uploading data to external db. *Thanks for sharing!*")
+            logging.info("Uploading data to external db. *Thanks for sharing!*")
             self.upload_data(df_output)
         return df_output
 
@@ -103,12 +102,20 @@ class homedb:
         df["user_id"] = self.user_id
         df = df[df["last_updated"] > last_update_time]
         if not df.empty:
-            logging.info(df)
-            try:
-                df.to_sql(name="states", con=self.extdb, if_exists="append")
-                logging.info(f"Data uploaded.")
-            except:
-                logging.warning(f"Duplicate Data found in db.")
+            logging.info(df.shape)
+
+            ## The Upload seems to be crazy slow
+            # try:
+            #     df.to_sql(
+            #         name="states",
+            #         con=self.extdb,
+            #         if_exists="append",
+            #         method="multi",
+            #         chunksize=3000,
+            #     )
+            #     logging.info(f"Data uploaded.")
+            # except:
+            #     logging.warning(f"Duplicate Data found in db.")
             max_time = df["last_updated"].max()
             self.update_user(max_time)
         else:
@@ -128,11 +135,11 @@ class homedb:
         if len(myresult) == 1:
             last_update_time = myresult[0][0]
             logging.info(
-                f"User id {self.user_id} exists, last_updated : {last_update_time}")
+                f"User id {self.user_id} exists, last_updated : {last_update_time}"
+            )
         else:
             # Add user if none
-            logging.info(
-                f"User id does not exist, creating new user: {self.user_id}")
+            logging.info(f"User id does not exist, creating new user: {self.user_id}")
             last_update_time = datetime(1900, 1, 1, 0, 0, 0, 0)
             query = f"CALL CreateUser ('{self.user_id}','{last_update_time}');"
             with self.extdb.begin() as connection:
@@ -140,8 +147,7 @@ class homedb:
         return last_update_time
 
     def update_user(self, c_time: datetime):
-        logging.info(
-            f"Updating user table with last_update_time {c_time} and config")
+        logging.info(f"Updating user table with last_update_time {c_time} and config")
         query = f"CALL UpdateUser ('{self.user_id}','{c_time}','{tsh_config.options_json}');"
 
         with self.extdb.begin() as connection:

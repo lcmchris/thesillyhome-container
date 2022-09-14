@@ -38,8 +38,7 @@ def to_labels(pos_probs, threshold):
 def optimization_fucntion(precision, recall):
     # convert to f score
     epsilon = 0.01
-    optimizer = (2 * precision * recall) / \
-        (1 / 5 * precision + recall + epsilon)
+    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
 
     # locate the index of the largest f score
     ix = np.argmax(optimizer)
@@ -52,8 +51,7 @@ def train_all_actuator_models():
     """
     actuators = tsh_config.actuators
 
-    df_act_states = pd.read_pickle(
-        f"{tsh_config.data_dir}/parsed/act_states.pkl")
+    df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")
     df_act_states = df_act_states.reset_index(drop=True)
 
     # Generate feature and output vectors from act states.
@@ -96,6 +94,10 @@ def train_all_actuator_models():
             logging.info("Samples less than 100. Skipping")
             continue
 
+        if df_act["state"].nunique() == 1:
+            logging.info(f"All cases for {actuator} have the same state. Skipping")
+            continue
+
         """
         Setting output and feature vector
         """
@@ -112,8 +114,7 @@ def train_all_actuator_models():
         # Split into random training and test set
         X = feature_vector
         y = output_vector
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.1)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
 
         # # Weighting more recent observations more. 3 times if in top 50 percent
         sample_weight = np.ones(len(X_train))
@@ -147,7 +148,8 @@ def train_all_actuator_models():
             "best_optimizer", ascending=False
         ).drop_duplicates(subset=["actuator"], keep="first")
     except:
-        logging.warning('No metrics.')
+        logging.warning("No metrics.")
+
     best_metrics_matrix.to_json(
         "/thesillyhome_src/frontend/static/data/metrics_matrix.json", orient="records"
     )
@@ -192,6 +194,7 @@ def train_all_classifiers(
 
         # keep probabilities for the positive outcome only
         y_predictions_proba = y_predictions_proba[:, 1]
+
         # calculate roc curves
         precision, recall, thresholds = precision_recall_curve(
             y_test, y_predictions_proba
@@ -202,8 +205,7 @@ def train_all_classifiers(
 
         # plot the roc curve for the model
         plt.plot(precision, recall, label=model_name, markevery=None)
-        plt.scatter(precision[ix], recall[ix],
-                    marker="o", label=f"{model_name}")
+        plt.scatter(precision[ix], recall[ix], marker="o", label=f"{model_name}")
 
         # axis labels
         plt.xlabel("Recall")

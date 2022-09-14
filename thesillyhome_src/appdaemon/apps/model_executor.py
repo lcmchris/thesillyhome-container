@@ -237,7 +237,7 @@ class ModelExecutor(hass.Hass):
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
         float_sensors = tsh_config.float_sensors
-        devices = actuators + sensors
+        devices = tsh_config.devices
         now = datetime.datetime.now()
 
         if entity in devices:
@@ -262,15 +262,6 @@ class ModelExecutor(hass.Hass):
                         df_sen_states[sensor] = true_state
 
             last_states = self.last_states
-            for device in devices:
-                last_state = last_states[device]["state"]
-                if device not in float_sensors:
-                    if f"last_state_{device}_{last_state}" in df_sen_states.columns:
-                        df_sen_states[f"last_state_{device}_{last_state}"] = 1
-                elif device in float_sensors:
-                    if (last_state) in df_sen_states.columns:
-                        df_sen_states[f"last_state_{device}"] = last_state
-
             all_states = self.get_state()
 
             # Extract current date

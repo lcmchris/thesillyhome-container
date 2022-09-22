@@ -56,7 +56,7 @@ class ModelExecutor(hass.Hass):
 
             self.log(f"Initialized rules engine DB", level="INFO")
             try:
-                db_rules_engine.to_sql("rules_engine", con=con, if_exists="fail")
+                db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
             except:
                 self.log(f"DB already exists. Skipping", level="INFO")
 

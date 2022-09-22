@@ -2,7 +2,6 @@
     "actuactors_id": [
         "light.bathroom_lights",
         "light.corridor_lights",
-        "light.hallway_lights",
         "switch.livingroom_entrance_switch_right",
         "switch.livingroom_entrance_switch_center",
         "switch.livingroom_entrance_switch_left",

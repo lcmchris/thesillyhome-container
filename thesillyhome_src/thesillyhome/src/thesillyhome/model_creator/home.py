@@ -152,3 +152,12 @@ class homedb:
 
         with self.extdb.begin() as connection:
             connection.execute(query)
+
+    
+    def verify_user_id(self):
+        query = f"SELECT \
+                    last_update_time \
+                from users where user_id = '{self.user_id}';"
+
+        with self.extdb.begin() as connection:
+            myresult = connection.execute(query).fetchall()

@@ -1,4 +1,5 @@
 {
+    "user_id": "XXXX",
     "actuactors_id": [
         "light.bathroom_lights",
         "light.corridor_lights",

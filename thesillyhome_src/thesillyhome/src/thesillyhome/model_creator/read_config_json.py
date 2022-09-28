@@ -17,6 +17,7 @@ options = json.load(config_file)
 options_json = json.dumps(options)
 
 # Mandatory
+user_id = options["user_id"]
 actuators = options["actuactors_id"]
 sensors = options["sensors_id"]
 devices = actuators + sensors

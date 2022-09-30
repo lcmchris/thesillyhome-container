@@ -97,7 +97,6 @@ class ModelExecutor(hass.Hass):
                 1,
                 2,
             ], "        More than 2 matching rules.  Please reach out in https://discord.gg/bCM2mX9S for assistance."
-            self.log(f"matching_rule {matching_rule}")
             rules_state = matching_rule["state"].values
 
             if len(matching_rule) == 2:

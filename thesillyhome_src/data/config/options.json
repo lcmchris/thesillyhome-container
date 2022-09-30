@@ -1,5 +1,6 @@
 {
-    "user_id": "XXXX",
+    "username": "XXXX",
+    "password": "XXXX",
     "actuactors_id": [
         "light.bathroom_lights",
         "light.corridor_lights",

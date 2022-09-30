@@ -104,7 +104,7 @@ class homedb:
         if self.valid_user is None:
             last_update_time = self.create_user()
         else:
-            last_update_time = self.valid_user()
+            last_update_time = self.valid_user
 
         df["user_id"] = tsh_config.username
         df = df[df["last_updated"] > last_update_time]
@@ -119,7 +119,8 @@ class homedb:
         options_json = json.dumps(
             {
                 k: tsh_config.options[k]
-                for k in set(list(tsh_config.keys())) - set(["ha_options", "password"])
+                for k in set(tsh_config.options.keys())
+                - set(["ha_options", "password"])
             }
         )
         query = f"UPDATE thesillyhomedb.users \

@@ -10,5 +10,4 @@ appdaemon:
       token: <ha_token>
 logs:
   main_log:
-    filename: /thesillyhome_src/log/appdaemon.log
     log_generations: 3

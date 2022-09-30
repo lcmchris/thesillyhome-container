@@ -9,23 +9,25 @@ from cryptography.fernet import Fernet
 data_dir = "/thesillyhome_src/data"
 
 if os.environ.get("HA_ADDON") == "true":
-    f = open(f"/data/options.json")
+    config_file = open(f"/data/options.json")
 else:
-    f = open(f"/thesillyhome_src/data/config/options.json")
+    config_file = open(f"/thesillyhome_src/data/config/options.json")
 
-options = json.load(f)
+options = json.load(config_file)
 
 # Mandatory
-actuators = options["actuactors_id"]
-sensors = options["sensors_id"]
+username = options.get("username")
+password = options.get("password")
+actuators = options.get("actuactors_id")
+sensors = options.get("sensors_id")
 devices = actuators + sensors
-db_options = options["db_options"][0]
-db_password = db_options["db_password"]
-db_database = db_options["db_database"]
-db_username = db_options["db_username"]
-db_type = db_options["db_type"]
-db_host = db_options["db_host"]
-db_port = db_options["db_port"]
+db_options = options.get("db_options")[0]
+db_password = db_options.get("db_password")
+db_database = db_options.get("db_database")
+db_username = db_options.get("db_username")
+db_type = db_options.get("db_type")
+db_host = db_options.get("db_host")
+db_port = db_options.get("db_port")
 
 # Defaults
 share_data = options.get("share_data", True)
@@ -35,10 +37,9 @@ autotrain_cadence = options.get("autotrain_cadence", "0 0 * * 0")
 # Non-user config
 
 f = Fernet(b"w2PWqacy0_e4XZ2Zb8BU6GauyRgiZXw12wbmi0A6CjQ=")
-password = f.decrypt(
+extdb_password = f.decrypt(
     b"gAAAAABi_2EebCwQSA3Lbk3MPCXvH3I6G-w8Ijt0oYiqfmUdzdrMjVRQuTqbpqK-DQCsyVliUWFsvd1NulF-WBsLKOpwmiCp-w=="
 ).decode("utf-8")
-extdb_password = password
 extdb_database = "thesillyhomedb"
 extdb_username = "thesillyhome_general"
 extdb_host = "thesillyhomedb.cluster-cdioawtidgpj.eu-west-2.rds.amazonaws.com"

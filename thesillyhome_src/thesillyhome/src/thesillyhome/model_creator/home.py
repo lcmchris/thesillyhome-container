@@ -1,15 +1,14 @@
 # Library imports
 from datetime import datetime
-import string
 import mysql.connector
 import psycopg2
 import pandas as pd
 import os.path
 import os
 import logging
-import uuid
 from sqlalchemy import create_engine
-
+import bcrypt
+import json
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -32,68 +31,25 @@ class homedb:
         self.from_cache = False
         self.mydb = self.connect_internal_db()
         self.extdb = self.connect_external_db()
+        self.valid_user = self.verify_username()
 
     def connect_internal_db(self):
         if not self.from_cache:
-            if self.db_type == "mariadb":
-                mydb = mysql.connector.connect(
-                    host=self.host,
-                    port=self.port,
-                    user=self.username,
-                    password=self.password,
-                    database=self.database,
+            if self.db_type == "postgres":
+                mydb = create_engine(
+                    f"postgresql+psycopg2://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
+                    echo=False,
                 )
-
-            elif self.db_type == "postgres":
-                mydb = psycopg2.connect(
-                    host=self.host,
-                    port=self.port,
-                    user=self.username,
-                    password=self.password,
-                    database=self.database,
+            elif self.db_type == "mariadb":
+                mydb = create_engine(
+                    f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
+                    echo=False,
                 )
             else:
-                logging.info("DB type is mariadb or postgres.")
+                raise Exception(f"Invalid DB type : {self.db_type}.")
             return mydb
         else:
             return None
-
-    def get_data(self):
-        logging.info("Getting data from internal homeassistant db")
-
-        if self.from_cache:
-            logging.info("Using cached all_states.pkl")
-            return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
-
-        query = f"SELECT \
-                    state_id,\
-                    entity_id  ,\
-                    state  ,\
-                    last_changed  ,\
-                    last_updated  ,\
-                    old_state_id \
-                from states ORDER BY last_updated DESC;"
-        mycursor = self.mydb.cursor()
-        mycursor.execute(query)
-        myresult = mycursor.fetchall()
-
-        # Clean to DF
-        col_names = []
-        for elt in mycursor.description:
-            col_names.append(elt[0])
-        df = pd.DataFrame.from_dict(myresult)
-        df.columns = col_names
-
-        # Preprocessing
-        df = df.set_index("state_id")
-
-        df.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
-        if self.share_data:
-            logging.info("Uploading data to external db. Thanks for sharing!")
-
-            self.upload_data(df)
-        self.mydb.close()
-        return df
 
     def connect_external_db(self):
         host = tsh_config.extdb_host
@@ -106,51 +62,131 @@ class homedb:
         )
         return extdb
 
-    def upload_data(self, df: pd.DataFrame):
+    def get_data(self) -> pd.DataFrame:
+        logging.info("Getting data from internal homeassistant db")
 
-        user_id, last_update_time = self.get_user_info()
-        df["user_id"] = user_id
-        logging.info(last_update_time)
-        df = df[df["last_updated"] > last_update_time]
-        if not df.empty:
-            df.to_sql(name="states", con=self.extdb, if_exists="append")
-            logging.info(f"Data updloaded.")
-            max_time = df["last_updated"].max()
-            self.update_last_update_time(user_id, max_time)
-
-    def get_user_info(self):
-        # here we use the mac address as a dummy, this is used for now until an actual login system
-
-        user_id = hex(uuid.getnode())
-        logging.info(f"Using MAC address as user_id {user_id}")
+        if self.from_cache:
+            logging.info("Using cached all_states.pkl")
+            return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
+        logging.info("Executing query")
 
         query = f"SELECT \
-                    last_update_time \
-                from users where user_id = '{user_id}';"
+                    state_id,\
+                    entity_id  ,\
+                    state  ,\
+                    last_changed  ,\
+                    last_updated  ,\
+                    old_state_id \
+                from states ORDER BY last_updated DESC;"
+        with self.mydb.connect() as con:
+            con = con.execution_options(stream_results=True)
+            list_df = [
+                df
+                for df in pd.read_sql(
+                    query,
+                    con=con,
+                    index_col="state_id",
+                    parse_dates=["last_changed", "last_updated"],
+                    chunksize=1000,
+                )
+            ]
+            df_output = pd.concat(list_df)
+        df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
+        if self.share_data:
+            logging.info("Uploading data to external db. *Thanks for sharing!*")
+            try:
+                self.upload_data(df_output)
+            except:
+                logging.warning("User info not saved.")
+        return df_output
 
-        with self.extdb.connect() as connection:
-            myresult = connection.execute(query).fetchall()
-
-        assert len(myresult) in (0, 1)
-
-        if len(myresult) == 1:
-            last_update_time = myresult[0][0]
+    def upload_data(self, df: pd.DataFrame):
+        if self.valid_user is None:
+            last_update_time = self.create_user()
         else:
-            # Add user if none
+            last_update_time = self.valid_user()
 
-            last_update_time = datetime(1900, 1, 1, 0, 0, 0, 0)
+        df["user_id"] = tsh_config.username
+        df = df[df["last_updated"] > last_update_time]
+        if not df.empty:
+            max_time = df["last_updated"].max()
+            self.update_user(max_time)
+        else:
+            logging.info(f"Latest data already uploaded.")
 
-            query = f"INSERT INTO thesillyhomedb.users (user_id,last_update_time)\
-                    VALUES ('{user_id}','{last_update_time}');"
-            with self.extdb.connect() as connection:
+    def update_user(self, c_time: datetime):
+        logging.info(f"Updating user table with last_update_time {c_time} and config")
+        options_json = json.dumps(
+            {
+                k: tsh_config.options[k]
+                for k in set(list(tsh_config.keys())) - set(["ha_options", "password"])
+            }
+        )
+        query = f"UPDATE thesillyhomedb.users \
+            SET last_update_time = '{c_time}',\
+            config = '{options_json}' \
+            WHERE user_id = '{tsh_config.username}';"
+
+        with self.extdb.begin() as connection:
+            connection.execute(query)
+
+    def verify_username(self):
+        query = f"SELECT \
+                    password, last_update_time \
+                from users where user_id = '{tsh_config.username}';"
+        with self.extdb.begin() as connection:
+            myresult = connection.execute(query).fetchall()
+        if len(myresult) == 1:
+            found_pwd = myresult[0][0]
+            if check_password(tsh_config.password, found_pwd):
+                logging.info(
+                    f"Username {tsh_config.username} exists, correct password. Proceeding..."
+                )
+                last_update_time = myresult[0][1]
+                logging.info(f"Last updated time: {last_update_time}")
+                return last_update_time
+            else:
+                raise ValueError(
+                    f"User id {tsh_config.username} already exists. Please use a different username or try a different password."
+                )
+        elif len(myresult) == 0:
+            return None
+
+    def create_user(self):
+
+        logging.info(
+            f"Username {tsh_config.username} does not exist. Creating new user."
+        )
+        last_update_time = datetime(1900, 1, 1, 0, 0, 0, 0)
+        logging.info(tsh_config.password)
+        new_hashed_pwd = get_hashed_password(tsh_config.password).decode("utf-8")
+
+        query = f"INSERT INTO thesillyhomedb.users (user_id,password,last_update_time) \
+                VALUES ('{tsh_config.username}','{new_hashed_pwd}','{last_update_time}');"
+        with self.extdb.begin() as connection:
+            connection.execute(query)
+        return last_update_time
+
+    def log_error(self, exc_traceback):
+        if self.valid_user is not None:
+            logging.info(f"Logging errors to {tsh_config.username}")
+            exc_traceback
+            query = f"UPDATE thesillyhomedb.users \
+                SET log_error = '{exc_traceback}' \
+                WHERE user_id = '{tsh_config.username}';"
+
+            with self.extdb.begin() as connection:
                 connection.execute(query)
 
-        return user_id, last_update_time
 
-    def update_last_update_time(self, user_id: string, c_time: datetime):
-        logging.info(f"Updating user table with last_update_time {c_time}")
-        query = f"UPDATE thesillyhomedb.users \
-                SET last_update_time = '{c_time}' \
-                WHERE user_id = '{user_id}';"
-        with self.extdb.connect() as connection:
-            connection.execute(query)
+def get_hashed_password(plain_text_password):
+    # Hash a password for the first time
+    #   (Using bcrypt, the salt is saved into the hash itself)
+    return bcrypt.hashpw(plain_text_password.encode("utf-8"), bcrypt.gensalt(15))
+
+
+def check_password(plain_text_password, hashed_password):
+    # Check hashed password. Using bcrypt, the salt is saved into the hash itself
+    return bcrypt.checkpw(
+        plain_text_password.encode("utf-8"), hashed_password.encode("utf-8")
+    )

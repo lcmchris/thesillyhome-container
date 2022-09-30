@@ -90,6 +90,14 @@ def train_all_actuator_models():
             logging.info(f"No cases found for {actuator}")
             continue
 
+        if len(df_act) < 100:
+            logging.info("Samples less than 100. Skipping")
+            continue
+
+        if df_act["state"].nunique() == 1:
+            logging.info(f"All cases for {actuator} have the same state. Skipping")
+            continue
+
         """
         Setting output and feature vector
         """
@@ -119,10 +127,6 @@ def train_all_actuator_models():
         y_train = y_train.drop(columns="duplicate")
         y_test = y_test.drop(columns="duplicate")
 
-        if len(y_train) < 100:
-            logging.info("Training samples less than 100. Skipping")
-            continue
-
         train_all_classifiers(
             model_types,
             actuator,
@@ -138,10 +142,14 @@ def train_all_actuator_models():
     df_metrics_matrix = pd.DataFrame(metrics_matrix)
     df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
 
-    best_metrics_matrix = df_metrics_matrix.fillna(0)
-    best_metrics_matrix = df_metrics_matrix.sort_values(
-        "best_optimizer", ascending=False
-    ).drop_duplicates(subset=["actuator"], keep="first")
+    try:
+        best_metrics_matrix = df_metrics_matrix.fillna(0)
+        best_metrics_matrix = df_metrics_matrix.sort_values(
+            "best_optimizer", ascending=False
+        ).drop_duplicates(subset=["actuator"], keep="first")
+    except:
+        logging.warning("No metrics.")
+
     best_metrics_matrix.to_json(
         "/thesillyhome_src/frontend/static/data/metrics_matrix.json", orient="records"
     )
@@ -186,6 +194,7 @@ def train_all_classifiers(
 
         # keep probabilities for the positive outcome only
         y_predictions_proba = y_predictions_proba[:, 1]
+
         # calculate roc curves
         precision, recall, thresholds = precision_recall_curve(
             y_test, y_predictions_proba

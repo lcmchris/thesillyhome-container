@@ -56,7 +56,7 @@ class ModelExecutor(hass.Hass):
 
             self.log(f"Initialized rules engine DB", level="INFO")
             try:
-                db_rules_engine.to_sql("rules_engine", con=con, if_exists="fail")
+                db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
             except:
                 self.log(f"DB already exists. Skipping", level="INFO")
 
@@ -97,7 +97,6 @@ class ModelExecutor(hass.Hass):
                 1,
                 2,
             ], "        More than 2 matching rules.  Please reach out in https://discord.gg/bCM2mX9S for assistance."
-            self.log(f"matching_rule {matching_rule}")
             rules_state = matching_rule["state"].values
 
             if len(matching_rule) == 2:
@@ -237,7 +236,7 @@ class ModelExecutor(hass.Hass):
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
         float_sensors = tsh_config.float_sensors
-        devices = actuators + sensors
+        devices = tsh_config.devices
         now = datetime.datetime.now()
 
         if entity in devices:
@@ -262,15 +261,6 @@ class ModelExecutor(hass.Hass):
                         df_sen_states[sensor] = true_state
 
             last_states = self.last_states
-            for device in devices:
-                last_state = last_states[device]["state"]
-                if device not in float_sensors:
-                    if f"last_state_{device}_{last_state}" in df_sen_states.columns:
-                        df_sen_states[f"last_state_{device}_{last_state}"] = 1
-                elif device in float_sensors:
-                    if (last_state) in df_sen_states.columns:
-                        df_sen_states[f"last_state_{device}"] = last_state
-
             all_states = self.get_state()
 
             # Extract current date

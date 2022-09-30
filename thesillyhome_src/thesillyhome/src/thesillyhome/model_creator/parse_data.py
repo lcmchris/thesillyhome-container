@@ -1,17 +1,14 @@
 # Library imports
 import pandas as pd
 import numpy as np
-import copy
-from joblib import Parallel, delayed
-import tqdm
-from tqdm import tqdm
-import numpy as np
-from multiprocessing import cpu_count
 import logging
 
 # Local application imports
 from thesillyhome.model_creator.home import homedb
+from thesillyhome.model_creator.logger import add_logger
+from thesillyhome.model_creator.config_checker import check_device_ids
 import thesillyhome.model_creator.read_config_json as tsh_config
+
 
 
 def get_current_states(df_output: pd.DataFrame) -> pd.DataFrame:
@@ -63,9 +60,7 @@ def convert_unavailabe(df: pd.DataFrame) -> pd.DataFrame:
     ]
 
     choices = [0, "off"]
-    df["state"] = np.select(conditions, choices, default=df["state"])
-
-    return df["state"]
+    return np.select(conditions, choices, default=df["state"])
 
 
 def parse_data_from_db():
@@ -78,6 +73,8 @@ def parse_data_from_db():
     logging.info("Reading from homedb...")
     df_all = homedb().get_data()
     df_all = df_all[["entity_id", "state", "last_updated"]]
+    
+    check_device_ids(df_all["entity_id"].unique())
 
     df_all["state"] = convert_unavailabe(df_all)
     assert ~df_all["state"].isnull().values.any(), df_all[df_all["state"].isnull()]
@@ -140,4 +137,5 @@ def parse_data_from_db():
 
 
 if __name__ == "__main__":
+    add_logger()
     parse_data_from_db()

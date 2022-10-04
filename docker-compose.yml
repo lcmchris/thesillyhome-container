@@ -7,6 +7,7 @@ services:
     container_name: thesillyhome
     image: lcmchris1/thesillyhome-container:dev
     restart: unless-stopped
+    external: true
     volumes:
       - thesillyhome_config:/thesillyhome_src/data/config/
     ports:

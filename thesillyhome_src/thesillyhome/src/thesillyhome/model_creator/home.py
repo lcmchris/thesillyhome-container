@@ -77,7 +77,9 @@ class homedb:
                     last_changed  ,\
                     last_updated  ,\
                     old_state_id \
-                from states ORDER BY last_updated DESC;"
+                from states \
+                WHERE entity_id in ({str(tsh_config.devices)[1:-1]})\
+                ORDER BY last_updated DESC LIMIT 100000;"
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
             list_df = [

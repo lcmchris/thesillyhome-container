@@ -64,7 +64,7 @@ output_list_dup = ["entity_id", "state", "last_updated", "duplicate"]
 
 
 def replace_yaml():
-    if os.environ.get("HA_ADDON") == "true":
+    if os.environ.get("HA_ADDON") == "true" and options.get("ha_options") == None:
         with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "r") as f:
             content = f.read()
             content = content.replace("<ha_url>", "http://supervisor/core")

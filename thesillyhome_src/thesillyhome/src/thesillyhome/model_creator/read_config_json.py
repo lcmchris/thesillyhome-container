@@ -67,8 +67,9 @@ def replace_yaml():
     if os.environ.get("HA_ADDON") == "true" and options.get("ha_options") == None:
         with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "r") as f:
             content = f.read()
+            supervisor_token = os.environ["SUPERVISOR_TOKEN"]
             content = content.replace("<ha_url>", "http://supervisor/core")
-            content = content.replace("<ha_token>", "$SUPERVISOR_TOKEN")
+            content = content.replace("<ha_token>", f"""{supervisor_token}""")
 
         with open("/thesillyhome_src/appdaemon/appdaemon.yaml", "w") as file:
             file.write(content)

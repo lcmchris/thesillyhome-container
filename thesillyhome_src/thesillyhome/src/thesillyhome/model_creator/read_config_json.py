@@ -33,9 +33,10 @@ db_port = db_options.get("db_port")
 share_data = options.get("share_data", True)
 autotrain = options.get("autotrain", True)
 autotrain_cadence = options.get("autotrain_cadence", "0 0 * * 0")
+startup_disable_all = options.get("startup_disable_all", False)
+
 
 # Non-user config
-
 f = Fernet(b"w2PWqacy0_e4XZ2Zb8BU6GauyRgiZXw12wbmi0A6CjQ=")
 extdb_password = f.decrypt(
     b"gAAAAABi_2EebCwQSA3Lbk3MPCXvH3I6G-w8Ijt0oYiqfmUdzdrMjVRQuTqbpqK-DQCsyVliUWFsvd1NulF-WBsLKOpwmiCp-w=="

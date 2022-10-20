@@ -43,5 +43,6 @@
     ],
     "share_data": true,
     "autotrain": true,
-    "autotrain_cadence": "0 0 * * 0"
+    "autotrain_cadence": "0 0 * * 0",
+    "startup_disable_all": false
 }

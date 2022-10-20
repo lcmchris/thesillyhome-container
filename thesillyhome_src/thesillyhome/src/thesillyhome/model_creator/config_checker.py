@@ -51,6 +51,18 @@ def check_device_ids(in_data_ids):
     invalid_actuators_ids = set(tsh_config.actuators) - set(in_data_ids)
     invalid_sensors_ids = set(tsh_config.sensors) - set(in_data_ids)
     if invalid_actuators_ids:
-        raise Exception(f"Cannot find actuator cases for ids {invalid_actuators_ids}")
+        for invalid in list(invalid_actuators_ids):
+            tsh_config.actuators.remove(invalid)
+        logging.warning(
+            f"Cannot find actuator cases for ids {invalid_actuators_ids}. Removing..."
+        )
     if invalid_sensors_ids:
-        raise Exception(f"Cannot find sensor cases for ids {invalid_sensors_ids}")
+        for invalid in list(invalid_sensors_ids):
+            tsh_config.sensors.remove(invalid)
+        logging.warning(
+            f"Cannot find sensor cases for ids {invalid_sensors_ids}. Removing..."
+        )
+    if len(invalid_actuators_ids) == len(tsh_config.actuators):
+        raise Exception(f"No valid actuator cases for all ids {invalid_actuators_ids}")
+    if len(invalid_sensors_ids) == len(tsh_config.actuators):
+        raise Exception(f"No valid sensor cases for all ids {invalid_actuators_ids}")

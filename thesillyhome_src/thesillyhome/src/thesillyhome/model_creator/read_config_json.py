@@ -18,8 +18,8 @@ options = json.load(config_file)
 # Mandatory
 username = options.get("username")
 password = options.get("password")
-actuators = options.get("actuactors_id")
-sensors = options.get("sensors_id")
+actuators = list(options.get("actuactors_id"))
+sensors = list(options.get("sensors_id"))
 devices = actuators + sensors
 db_options = options.get("db_options")[0]
 db_password = db_options.get("db_password")

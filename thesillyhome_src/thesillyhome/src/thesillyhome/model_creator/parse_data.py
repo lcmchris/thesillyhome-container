@@ -10,7 +10,6 @@ from thesillyhome.model_creator.config_checker import check_device_ids
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 
-
 def get_current_states(df_output: pd.DataFrame) -> pd.DataFrame:
     """
     Returns pivoted frame of each state id desc
@@ -73,8 +72,10 @@ def parse_data_from_db():
     logging.info("Reading from homedb...")
     df_all = homedb().get_data()
     df_all = df_all[["entity_id", "state", "last_updated"]]
-    
+
     check_device_ids(df_all["entity_id"].unique())
+    logging.info(tsh_config.actuators)
+    logging.info(tsh_config.sensors)
 
     df_all["state"] = convert_unavailabe(df_all)
     assert ~df_all["state"].isnull().values.any(), df_all[df_all["state"].isnull()]

@@ -1,14 +1,9 @@
 mysql-connector==2.2.9
-tqdm==4.64.0
-joblib==1.1.0
-threadpoolctl==3.1.0
 numpy==1.22.4
-scipy==1.8.1
 pandas==1.4.2
 scikit-learn==1.1.1
 psycopg2==2.9.3
 matplotlib==3.5.2
 sqlalchemy==1.4.40
 pymysql==1.0.2
-black==22.6.0
 cryptography==37.0.4

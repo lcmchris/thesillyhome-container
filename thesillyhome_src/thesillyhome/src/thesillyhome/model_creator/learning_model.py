@@ -239,7 +239,7 @@ def train_all_classifiers(
 
         # Save model to disk
         if optimizer[ix] > best_model:
-            if precision_best > 0.7:
+            if precision_best > 0.7 and not tsh_config.startup_disable_all:
                 metrics_json["model_enabled"] = True
             best_model = optimizer[ix]
             filename = open(f"{model_directory}/best_model.pkl", "wb")

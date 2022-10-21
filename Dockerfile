@@ -6,7 +6,8 @@ RUN apt-get update && apt-get install -y curl bash && \
     build-essential \
     libffi-dev \
     libpq-dev \
-    nodejs 
+    nodejs \
+    gfortran
 
 ARG PIP_EXTRA_INDEX_URL=https://www.piwheels.org/simple
 

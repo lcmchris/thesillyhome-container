@@ -3,8 +3,6 @@ import string
 import appdaemon.plugins.hass.hassapi as hass
 import pickle
 import pandas as pd
-from pandas import DataFrame
-from sklearn.tree import DecisionTreeClassifier
 import copy
 import os.path
 import logging
@@ -90,7 +88,6 @@ class ModelExecutor(hass.Hass):
         all_rules = all_rules[all_rules["entity_id"] == act]
 
         if not all_rules.empty:
-            rules_to_verify.to_pickle("test.pkl")
             matching_rule = all_rules.merge(rules_to_verify)
             assert len(matching_rule) in [
                 0,

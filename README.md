@@ -98,11 +98,11 @@ See the [example config file](https://github.com/lcmchris/thesillyhome-container
 # Contribution guide
 
 ### Support
-Reach out in our [Discord](https://discord.com/channels/983116130061271040/983116130061271043) for support on issues.
+Reach out in our [Discord](https://discord.gg/haVav7uXm8) for support on issues.
 Raise code issues in GitHub and tag as bugs.
 
 ### Feature Requests
-Discuss features in our [Discord](https://discord.com/channels/983116130061271040/983116623693095023).
+Discuss features in our [Discord](https://discord.gg/haVav7uXm8).
 Raise issues on GitHub and tag as enhancements.
 
 </br></br>

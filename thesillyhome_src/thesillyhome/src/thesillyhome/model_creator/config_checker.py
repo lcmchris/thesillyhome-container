@@ -5,8 +5,6 @@ import logging
 def base_config_checks():
     check_mandatory_fields(
         [
-            ("username", tsh_config.username),
-            ("password", tsh_config.password),
             ("actuators", tsh_config.actuators),
             ("sensors", tsh_config.sensors),
             ("db_options", tsh_config.db_options),
@@ -18,13 +16,7 @@ def base_config_checks():
             ("db_port", tsh_config.db_port),
         ]
     )
-    check_password(tsh_config.password)
     check_db(tsh_config.db_type)
-
-
-def check_password(password):
-    if len(password) < 8:
-        raise Exception("Make sure your password is at least 8 characters.")
 
 
 def check_db(db_type):

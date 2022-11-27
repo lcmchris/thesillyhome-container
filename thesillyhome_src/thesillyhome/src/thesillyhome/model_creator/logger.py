@@ -33,15 +33,8 @@ def add_logger():
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
-        print(exc_traceback)
         logger.error(
             "Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback)
-        )
-
-        homedb().log_error(
-            str("".join(format_exception(exc_type, exc_value, exc_traceback))).replace(
-                "'", '"'
-            )
         )
 
     sys.excepthook = handle_exception

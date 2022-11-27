@@ -16,8 +16,6 @@ else:
 options = json.load(config_file)
 
 # Mandatory
-username = options.get("username")
-password = options.get("password")
 actuators = list(options.get("actuactors_id"))
 sensors = list(options.get("sensors_id"))
 devices = actuators + sensors
@@ -30,7 +28,6 @@ db_host = db_options.get("db_host")
 db_port = db_options.get("db_port")
 
 # Defaults
-share_data = options.get("share_data", True)
 autotrain = options.get("autotrain", True)
 autotrain_cadence = options.get("autotrain_cadence", "0 0 * * 0")
 startup_disable_all = options.get("startup_disable_all", False)

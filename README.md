@@ -85,8 +85,8 @@ db_options: All settings for connecting to the homeassistant database
   db_username: Database username e.g homeassistant
   db_host:  Database host 192.168.1.100
   db_port:  Database port '3306'
-  db_database:  Database name homeassistant
-	db_type:  Database type. Only {mariadb,postgres} is supported
+  db_database:  Database name homeassistant, or the sqlite db filename (`home-assistant_v2.db` is the default)
+  db_type:  Database type. Only {sqlite,mariadb,postgres} is supported
  ha_options: All settings for connecting to homeassistant. These settings are only required for Homeassistant Container setup.
   ha_url: IP of your homeassistant
   ha_token: Long lived access token. This is required for the Appdaemon.

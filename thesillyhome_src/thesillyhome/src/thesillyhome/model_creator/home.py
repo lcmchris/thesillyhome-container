@@ -42,6 +42,11 @@ class homedb:
                     f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
                     echo=False,
                 )
+            elif self.db_type == "sqlite":
+                mydb = create_engine(
+                    f"sqlite:////config/{self.database}",
+                    echo=False,
+                )
             else:
                 raise Exception(f"Invalid DB type : {self.db_type}.")
             return mydb

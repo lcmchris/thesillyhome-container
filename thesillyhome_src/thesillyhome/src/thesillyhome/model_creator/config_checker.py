@@ -20,8 +20,10 @@ def base_config_checks():
 
 
 def check_db(db_type):
-    if db_type not in ["mariadb", "postgres"]:
-        raise Exception("Make sure your dbtype is either `mariadb` or `postgres`.")
+    if db_type not in ["mariadb", "postgres", "sqlite"]:
+        raise Exception(
+            "Make sure your dbtype is either `mariadb` or `postgres` or `sqlite`. "
+        )
 
 
 def check_mandatory_fields(mandatory_fields: list):

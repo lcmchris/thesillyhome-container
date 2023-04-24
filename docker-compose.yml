@@ -5,7 +5,7 @@ volumes:
 
 services:
   thesillyhome:
-    container_name: thesillyhome_ha
+    container_name: thesillyhome
     image: lcmchris1/thesillyhome-container:dev
     restart: unless-stopped
     volumes:

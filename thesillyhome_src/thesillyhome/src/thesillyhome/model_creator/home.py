@@ -56,15 +56,17 @@ class homedb:
             return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         logging.info("Executing query")
 
+
         query = f"SELECT \
-                    state_id,\
-                    entity_id  ,\
-                    state  ,\
-                    last_changed  ,\
-                    last_updated  ,\
-                    old_state_id \
+                    states.state_id AS state_id  ,\
+                    states_meta.entity_id AS entity_id  ,\
+                    states.state AS state  ,\
+                    states.last_changed AS last_changed  ,\
+                    states.last_updated AS last_updated  ,\
+                    states.old_state_id AS old_state_id  \
                 from states \
-                WHERE entity_id in ({str(tsh_config.devices)[1:-1]})\
+                JOIN states_meta ON states.metadata_id = states_meta.metadata_id\
+                WHERE states_meta.entity_id in ({str(tsh_config.devices)[1:-1]})\
                 ORDER BY last_updated DESC LIMIT 100000;"
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)

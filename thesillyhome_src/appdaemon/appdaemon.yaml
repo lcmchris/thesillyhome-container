@@ -1,12 +1,12 @@
 appdaemon:
-  latitude: 52.379189
-  longitude: 4.899431
-  elevation: 2
-  time_zone: Europe/London
+  latitude: <latitude>
+  longitude: <longitude>
+  elevation: <elevation>
+  time_zone: <time_zone>  
   plugins:
     HASS:
       type: hass
-      ha_url: <ha_url>
+      ha_url: <ha_url>             
       token: <ha_token>
 logs:
   main_log:

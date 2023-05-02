@@ -1,5 +1,5 @@
 import logging
-#from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 import sys
 from traceback import format_exception
 
@@ -13,10 +13,10 @@ def add_logger():
     logger.setLevel(logging.DEBUG)
     logname = "/thesillyhome_src/log/thesillyhome.log"
 
-    # setup logging to file
-   # filelog = TimedRotatingFileHandler(
-   #     logname, when="midnight", interval=1, backupCount=3
-   # )
+    setup logging to file
+     filelog = TimedRotatingFileHandler(
+        logname, when="midnight", interval=1, backupCount=3
+    )
     fileformatter = logging.Formatter(FORMAT)
     filelog.setLevel(logging.DEBUG)
     filelog.setFormatter(fileformatter)

@@ -2,27 +2,9 @@
     "username": "XXXX",
     "password": "XXXX",
     "actuactors_id": [
-        "light.bathroom_lights",
-        "light.corridor_lights",
-        "switch.livingroom_entrance_switch_right",
-        "switch.livingroom_entrance_switch_center",
-        "switch.livingroom_entrance_switch_left",
-        "light.bedroom_sidetable_lamp",
-        "light.bedroom_ceiling_light"
+        "light.bathroom_lights"
     ],
     "sensors_id": [
-        "sensor.corridor_end_sensor_illuminance_lux",
-        "binary_sensor.corridor_end_sensor_occupancy",
-        "sensor.corridor_entrance_sensor_illuminance_lux",
-        "binary_sensor.corridor_entrance_sensor_occupancy",
-        "sensor.livingroom_desk_sensor_illuminance_lux",
-        "binary_sensor.livingroom_desk_sensor_occupancy",
-        "sensor.bedroom_entrance_sensor_illuminance_lux",
-        "binary_sensor.bedroom_entrance_sensor_occupancy",
-        "sensor.bathroom_entrance_sensor_illuminance_lux",
-        "binary_sensor.bathroom_entrance_sensor_occupancy",
-        "binary_sensor.chris_phone_is_charging",
-        "device_tracker.chris_phone",
         "weather.home"
     ],
     "db_options": [
@@ -38,11 +20,11 @@
     "ha_options": [
         {
             "ha_url": "http://192.168.1.100:8123",
-            "ha_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiI5Y2Q4MzQ5ZjNlOTA0ZGVjOGRhMTFmZWVjMDEzYjA4ZiIsImlhdCI6MTY1NDU4ODY3MCwiZXhwIjoxOTY5OTQ4NjcwfQ.DGOdEqbi_HujDZ-Xh16UiKyWCtBl2rdbQ6yl-7peLs4"
+            "ha_token": "xxxxxxxxxxxxxxxx"
         }
     ],
     "share_data": true,
     "autotrain": true,
-    "autotrain_cadence": "0 0 * * 0",
+    "autotrain_cadence": "* * * * *",
     "startup_disable_all": false
 }

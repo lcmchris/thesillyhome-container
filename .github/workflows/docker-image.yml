@@ -15,6 +15,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag lightningpicture/dev:$(date +%s)
+      run: docker build . --file Dockerfile --tag lightningpicture/aarch64-thesillyhome-dev:$(date +%s)
     - name: push to HUB
-      run: docker push lightningpicture
+      run: docker push lightningpicture/aarch64-thesillyhome-dev:$(date +%s)

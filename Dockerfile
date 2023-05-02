@@ -21,7 +21,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN pip3 install --upgrade pip && \
     pip3 install setuptools==62.4.0 && \
     pip3 install -e /thesillyhome_src/thesillyhome/ && \
-    pip3 install appdaemon==4.2.1 \
+    pip3 install appdaemon==4.2.1 && \
     pip3 install ctimed-rotating-file-handler
 
 WORKDIR /thesillyhome_src/frontend

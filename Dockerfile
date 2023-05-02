@@ -24,7 +24,7 @@ RUN pip3 install --upgrade pip && \
     pip3 install appdaemon==4.2.1 
 
 WORKDIR /thesillyhome_src/frontend
-RUN nüm update -g && npm install && npm run build
+RUN npm update -g && npm install && npm run build
 
 FROM python:3.9-slim-bullseye AS build-image
 

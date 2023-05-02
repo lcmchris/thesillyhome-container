@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y curl bash && \
     libffi-dev \
     libpq-dev \
     nodejs \
-    gfortran
+    gfortran \
+    apt-utils \
+    nano
 
 ARG PIP_EXTRA_INDEX_URL=https://www.piwheels.org/simple
 
@@ -22,7 +24,7 @@ RUN pip3 install --upgrade pip && \
     pip3 install appdaemon==4.2.1 
 
 WORKDIR /thesillyhome_src/frontend
-RUN npm install && npm run build
+RUN nüm update -g && npm install && npm run build
 
 FROM python:3.9-slim-bullseye AS build-image
 

@@ -60,8 +60,8 @@ class homedb:
                     states.state_id AS state_id  ,\
                     states_meta.entity_id AS entity_id  ,\
                     states.state AS state  ,\
-                    states.last_changed AS last_changed  ,\
-                    states.last_updated AS last_updated  ,\
+                    states.last_changed_ts AS last_changed  ,\
+                    states.last_updated_ts AS last_updated  ,\
                     states.old_state_id AS old_state_id  \
                 from states \
                 JOIN states_meta ON states.metadata_id = states_meta.metadata_id\

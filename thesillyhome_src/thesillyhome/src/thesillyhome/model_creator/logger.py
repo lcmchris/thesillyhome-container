@@ -13,10 +13,10 @@ def add_logger():
     logger.setLevel(logging.DEBUG)
     logname = "/thesillyhome_src/log/thesillyhome.log"
 
-  #  setup logging to file
+    setup logging to file
   #   filelog = TimedRotatingFileHandler(
   #      logname, when="midnight", interval=1, backupCount=3
-  #  )
+    )
     fileformatter = logging.Formatter(FORMAT)
     filelog.setLevel(logging.DEBUG)
     filelog.setFormatter(fileformatter)

@@ -22,8 +22,9 @@ RUN pip3 install --upgrade pip && \
     pip3 install setuptools==62.4.0 && \
     pip3 install -e /thesillyhome_src/thesillyhome/ && \
     pip3 install appdaemon==4.2.1 && \
-    pip3 install logging && \
-    pip3 install emit
+    pip3 install emit && \    
+    pip3 install logging 
+
 
 WORKDIR /thesillyhome_src/frontend
 RUN npm update -g && npm install && npm run build

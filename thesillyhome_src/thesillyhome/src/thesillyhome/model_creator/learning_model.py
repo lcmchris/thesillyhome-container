@@ -90,8 +90,8 @@ def train_all_actuator_models():
             logging.info(f"No cases found for {actuator}")
             continue
 
-        if len(df_act) < 10:
-            logging.info("Samples less than 10. Skipping")
+        if len(df_act) < 1:
+            logging.info("Samples less than 1. Skipping")
             continue
 
         if df_act["state"].nunique() == 1:

@@ -10,7 +10,7 @@ jobs:
 
   build:
 
-    runs-on: bullseye-latest
+    runs-on: debian-bullseye
 
     steps:
     - uses: actions/checkout@v3

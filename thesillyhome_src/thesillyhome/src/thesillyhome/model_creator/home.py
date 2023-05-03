@@ -60,13 +60,13 @@ class homedb:
                     states.state_id AS state_id  ,\
                     states_meta.entity_id AS entity_id  ,\
                     states.state AS state  ,\
-                    states.last_changed AS last_changed  ,\
-                    states.last_updated AS last_updated  ,\
+                    states.last_changed_ts AS last_changed  ,\
+                    states.last_updated AS_ts last_updated  ,\
                     states.old_state_id AS old_state_id  \
                 from states \
                 JOIN states_meta ON states.metadata_id = states_meta.metadata_id\
                 WHERE states_meta.entity_id in ({str(tsh_config.devices)[1:-1]})\
-                ORDER BY last_updated DESC LIMIT 100000;"
+                ORDER BY last_updated DESC LIMIT 1000;"
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
             list_df = [

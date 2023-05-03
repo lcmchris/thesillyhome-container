@@ -10,7 +10,7 @@ from thesillyhome.model_creator.config_checker import base_config_checks
 
 if __name__ == "__main__":
     
-    #add_logger()
+    add_logger()
     base_config_checks()
     replace_yaml()
     parse_data_from_db()

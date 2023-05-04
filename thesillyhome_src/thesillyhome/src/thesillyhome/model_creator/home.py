@@ -66,7 +66,7 @@ class homedb:
                 from states \
                 JOIN states_meta ON states.metadata_id = states_meta.metadata_id\
                 WHERE states_meta.entity_id in ({str(tsh_config.devices)[1:-1]})\
-                ORDER BY states.last_changed_ts DESC LIMIT 10000;"
+                ORDER BY states.last_changed_ts DESC LIMIT 2;"
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
             list_df = [

@@ -32,7 +32,4 @@ jobs:
         context: "{{defaultContext}}"
         push: true
         tags: lightningpicture/aarch64-thesillyhome-dev:dev
-      with:
-        context: "{{defaultContext}}"
-        push: true
-        tags: lightningpicture/aarch64-thesillyhome-dev:dev-arm
+

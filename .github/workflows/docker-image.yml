@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag lightningpicture/aarch64-thesillyhome-dev:dev
+      run: docker build . --file Dockerfile --tag lightningpicture/aarch64-thesillyhome-dev:dev-3
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -30,5 +30,5 @@ jobs:
       with:
         context: "{{defaultContext}}"
         push: true
-        tags: lightningpicture/aarch64-thesillyhome-dev:dev
+        tags: lightningpicture/aarch64-thesillyhome-dev:dev-3
 

@@ -1,4 +1,4 @@
-name: ARM Image CI
+name: ARM Image CI test
 
 on:
   push:

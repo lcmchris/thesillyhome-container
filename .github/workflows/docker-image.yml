@@ -32,9 +32,6 @@ jobs:
         context: "{{defaultContext}}"
         push: true
         tags: lightningpicture/aarch64-thesillyhome-dev:dev
-
-    - name: Build and push Docker arm image
-      uses: docker/build-push-action@v2
       with:
         context: "{{defaultContext}}"
         push: true

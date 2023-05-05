@@ -25,6 +25,7 @@ jobs:
       - uses: docker/setup-qemu-action@v2
         with:
           platforms: 'arm64,arm'
+          tags: lightningpicture/aarch64-thesillyhome-dev:dev-arm
 
       - uses: docker/setup-buildx-action@v2
     

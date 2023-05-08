@@ -65,7 +65,7 @@ class homedb:
                     states.old_state_id AS old_state_id  \
                 from states \
                 JOIN states_meta ON states.metadata_id = states_meta.metadata_id\
-                WHERE states_meta.entity_id in ({str(tsh_config.devices)[1:-1]}) and states.state != "unavailable" \
+                WHERE states_meta.entity_id in ({str(tsh_config.devices)[1:-1]}) and states.state != 'unavailable' \
                 ORDER BY states_meta.entity_id;"
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)

@@ -57,16 +57,19 @@ class homedb:
         logging.info("Executing query")
 
         query = f"SELECT \
-                    states.state_id AS state_id  ,\
-                    states_meta.entity_id AS entity_id  ,\
-                    states.state AS state  ,\
-                    states.last_changed_ts AS last_changed  ,\
-                    states.last_updated_ts AS last_updated  ,\
-                    states.old_state_id AS old_state_id  \
-                from states \
-                JOIN states_meta ON states.metadata_id = states_meta.metadata_id\
-                WHERE states_meta.entity_id in ({str(tsh_config.devices)[1:-1]}) and states.state != 'unavailable' \
-                ORDER BY states_meta.entity_id;"
+            states.state_id AS state_id  ,\
+            states_meta.entity_id AS entity_id  ,\
+            states.state AS state  ,\
+            states.last_changed_ts AS last_changed  ,\
+            states.last_updated_ts AS last_updated  ,\
+            states.old_state_id AS old_state_id  \
+        FROM states \
+        JOIN states_meta ON states.metadata_id = states_meta.metadata_id\
+        WHERE states_meta.entity_id IN ({str(tsh_config.devices)[1:-1]}) AND states.state != 'unavailable' \
+        GROUP BY states_meta.entity_id \
+        HAVING COUNT(states_meta.entity_id) > 20 \
+        ORDER BY states_meta.entity_id;"
+
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
             list_df = [

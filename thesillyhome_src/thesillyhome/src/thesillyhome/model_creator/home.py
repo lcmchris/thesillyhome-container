@@ -1,4 +1,3 @@
-# Library imports
 from datetime import datetime
 import mysql.connector
 import psycopg2
@@ -10,13 +9,7 @@ from sqlalchemy import create_engine
 import bcrypt
 import json
 
-# Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
-
-
-"""
-  Get data from DB and store locally
-"""
 
 
 class homedb:
@@ -43,7 +36,7 @@ class homedb:
                     echo=False,
                 )
             else:
-                raise Exception(f"Invalid DB type : {self.db_type}.")
+                raise Exception(f"Invalid DB type: {self.db_type}.")
             return mydb
         else:
             return None
@@ -54,41 +47,81 @@ class homedb:
         if self.from_cache:
             logging.info("Using cached all_states.pkl")
             return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
+        
         logging.info("Executing query")
-
-        query = f"SELECT \
-            states.state_id AS state_id, \
-            states_meta.entity_id AS entity_id, \
-            states.state AS state, \
-            states.last_updated_ts AS last_updated, \
-            states.old_state_id AS old_state_id \
-        FROM states \
-        JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-        WHERE states_meta.entity_id IN ({str(tsh_config.devices)[1:-1]}) \
-            AND states.state != 'unavailable' \
-            AND states_meta.entity_id IN ( \
-                SELECT states_meta.entity_id \
-                FROM states \
-                JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-                WHERE states.state != 'unavailable' \
-                AND states.last_updated_ts IS NOT NULL \
-                AND states.old_state_id IS NOT NULL \
-                GROUP BY states_meta.entity_id \
-            ) \
-        ORDER BY states.last_updated_ts DESC;"
+        query = """
+        SELECT
+            states.state_id AS state_id,
+            states_meta.entity_id AS entity_id,
+            states.state AS state,
+            states.last_changed AS last_changed,
+            states.last_updated AS last_updated,
+            states.old_state_id AS old_state_id
+        FROM
+            states
+            JOIN states_meta ON states.metadata_id = states_meta.metadata_id
+        WHERE
+            states_meta.entity_id IN (
+                'switch.solarakkuladung',
+                'switch.lichtschalter_buero_s1',
+                'switch.shelly_shsw_1_e8db84a1f048',
+                'switch.lichtschalter_abstellraum_s1',
+                'switch.lichtschalter_og_flur_s1',
+                'switch.lichtschalter_gaestezimmer_s1',
+                'switch.lichtschalter_hwr_s1',
+                'switch.lichtschalter_dg_flur_s1',
+                'switch.lichtschalter_schlafzimmer_s1',
+                'switch.lichtschalter_ankleidezimmer_s1',
+                'switch.lichtschalter_lichtschalter_treppe_ug_s1',
+                'light.led_schlafzimmer',
+                'switch.lichtschalter_badezimmer_s1',
+                'input_boolean.helper_presence_buro',
+                'input_boolean.helper_presence_gastezimmer',
+                'input_boolean.helper_presence_schlafzimmer',
+                'input_boolean.helper_presence_ankleidezimmer',
+                'switch.lichtschalter_treppe_ug_unten_s1',
+                'switch.lichtschalter_eingang',
+                'switch.lichtschalter_kueche_s1',
+                'switch.lichtschalter_essbereich_s1',
+                'light.led_tv_wohnzimmer',
+                'input_boolean.gaste_wc_occupied',
+                'switch.lichtschalter_gaestewc_1',
+                'switch.nuki_nuki_auto_lock',
+                'light.led_garten',
+                'switch.shelly_shsw_25_10521cf0c8fc_1',
+                'switch.lichtschalter_wohnzimmer_s2',
+                'switch.shelly_shsw_25_10521cf0c8fc_2',
+                'vacuum.berta',
+                'media_player.fernseher_wohnzimmer',
+                'light.duschen',
+                'input_boolean.at_home',
+                'input_boolean.alarmanlage_away',
+                'input_boolean.simon_schlafen',
+                'input_boolean.kristina_schlafen',
+                'switch.steckdose_berta'
+            )        
+        ORDER BY
+            last_updated DESC
+        LIMIT
+            100000;
+        """
 
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
-            list_df = [
-                df
-                for df in pd.read_sql(
-                    query,
-                    con=con,
-                    index_col="state_id",
-                    parse_dates=["last_updated"],
-                    chunksize=1000,
-                )
-            ]
-            df_output = pd.concat(list_df)
+            df_output = pd.read_sql(
+                query,
+                con=con,
+                index_col="state_id",
+                parse_dates=["last_updated"]
+            )
         df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         return df_output
+
+
+def parse_data_from_db():
+    db = homedb()
+    data = db.get_data()
+    # Perform further processing with the data
+
+
+parse_data_from_db()

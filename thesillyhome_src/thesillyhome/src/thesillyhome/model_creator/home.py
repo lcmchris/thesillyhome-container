@@ -125,3 +125,4 @@ def parse_data_from_db():
 
 
 parse_data_from_db()
+

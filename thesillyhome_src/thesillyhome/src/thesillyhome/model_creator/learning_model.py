@@ -66,7 +66,7 @@ def train_all_actuator_models():
         },
         "LogisticRegression": {
             "classifier": LogisticRegression,
-            "model_kwargs": {"max_iter": 10000},
+            "model_kwargs": {"max_iter": 100},
         },
         "RandomForestClassifier": {
             "classifier": RandomForestClassifier,
@@ -90,8 +90,8 @@ def train_all_actuator_models():
             logging.info(f"No cases found for {actuator}")
             continue
 
-        if len(df_act) < 100:
-            logging.info("Samples less than 100. Skipping")
+        if len(df_act) < 30:
+            logging.info("Samples less than 30. Skipping")
             continue
 
         if df_act["state"].nunique() == 1:

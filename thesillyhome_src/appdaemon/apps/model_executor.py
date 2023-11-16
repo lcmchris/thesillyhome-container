@@ -19,6 +19,11 @@ import thesillyhome.model_creator.read_config_json as tsh_config
 
 class ModelExecutor(hass.Hass):
     def initialize(self):
+        # Define columns for current_state_base DataFrame
+        feature_list = self.get_base_columns()
+        current_state_base = pd.DataFrame(columns=feature_list)
+        # Set initial values in current_state_base DataFrame
+        current_state_base.loc[0] = 0
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"

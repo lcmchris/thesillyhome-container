@@ -1,3 +1,5 @@
+This project is currently on pause.
+
 # Welcome to the thesillyhome-container
 
 # Introduction

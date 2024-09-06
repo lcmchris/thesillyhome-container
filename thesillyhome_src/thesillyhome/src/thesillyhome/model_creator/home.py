@@ -75,7 +75,7 @@ class homedb:
                     HAVING COUNT(*) > 50
                 )
             ORDER BY states.entity_id, states.last_updated DESC
-            LIMIT 150;  -- Adjust this limit as needed
+            LIMIT 150; 
         """.format(devices=str(tsh_config.devices)[1:-1])
 
         with self.mydb.connect() as con:

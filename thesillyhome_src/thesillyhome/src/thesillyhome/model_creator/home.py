@@ -54,27 +54,31 @@ class homedb:
         if self.from_cache:
             logging.info("Using cached all_states.pkl")
             return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
+        
         logging.info("Executing query")
 
-        query = f"SELECT \
-            states.state_id AS state_id, \
-            states_meta.entity_id AS entity_id, \
-            states.state AS state, \
-            states.last_updated_ts AS last_updated_ts, \
-            states.old_state_id AS old_state_id \
-        FROM states \
-        JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-        WHERE states_meta.entity_id IN ({str(tsh_config.devices)[1:-1]}) \
-            AND states.state != 'unavailable' \
-            AND states_meta.entity_id IN ( \
-                SELECT states_meta.entity_id \
-                FROM states \
-                JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-                WHERE states.state != 'unavailable' \
-                GROUP BY states_meta.entity_id \
-                HAVING COUNT(*) > 50 \
-            ) \
-        ORDER BY states_meta.entity_id;"
+        query = f"""
+            SELECT 
+                states.state_id AS state_id,
+                states.entity_id AS entity_id,
+                states.state AS state,
+                states.last_updated AS last_updated_ts,
+                states.old_state_id AS old_state_id,
+                state_attributes.shared_data AS shared_data
+            FROM states
+            JOIN state_attributes ON states.attributes_id = state_attributes.attributes_id
+            WHERE states.entity_id IN ({str(tsh_config.devices)[1:-1]})
+                AND states.state != 'unavailable'
+                AND states.last_updated >= NOW() - INTERVAL '90 days'
+                AND states.entity_id IN (
+                    SELECT entity_id
+                    FROM states
+                    WHERE state != 'unavailable'
+                    GROUP BY entity_id
+                    HAVING COUNT(*) > 50
+                )
+            ORDER BY states.entity_id, states.last_updated DESC;
+        """
 
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
@@ -89,5 +93,6 @@ class homedb:
                 )
             ]
             df_output = pd.concat(list_df)
+        
         df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         return df_output

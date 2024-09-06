@@ -71,7 +71,7 @@ def parse_data_from_db():
 
     logging.info("Reading from homedb...")
     df_all = homedb().get_data()
-    df_all = df_all[["entity_id", "state", "last_updated"]]
+    df_all = df_all[["entity_id", "state", "last_updated_ts"]]
 
     check_device_ids(df_all["entity_id"].unique())
     logging.info(tsh_config.actuators)
@@ -96,12 +96,12 @@ def parse_data_from_db():
     Code to add one hot encoding for date time.
     This will help give features for time of day and day of the week.
     """
-    df_output["last_updated"] = pd.to_datetime(df_output["last_updated"])
-    df_output["hour"] = df_output["last_updated"].dt.hour
-    df_output["weekday"] = df_output["last_updated"].dt.date.apply(
+    df_output["last_updated_ts"] = pd.to_datetime(df_output["last_updated_ts"])
+    df_output["hour"] = df_output["last_updated_ts"].dt.hour
+    df_output["weekday"] = df_output["last_updated_ts"].dt.date.apply(
         lambda x: x.weekday()
     )
-    df_output = df_output.drop(columns=["last_updated"])
+    df_output = df_output.drop(columns=["last_updated_ts"])
 
     """
     feature list extraction

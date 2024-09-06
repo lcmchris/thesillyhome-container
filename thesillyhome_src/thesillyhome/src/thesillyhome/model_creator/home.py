@@ -56,27 +56,26 @@ class homedb:
             return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         logging.info("Executing query")
 
-        query = """
-            SELECT
-                states.state_id AS state_id,
-                states.entity_id AS entity_id,
-                states.state AS state,
-                states.last_updated AS last_updated_ts,
-                states.old_state_id AS old_state_id
-            FROM states
-            JOIN state_attributes ON states.attributes_id = state_attributes.attributes_id
-            WHERE states.entity_id IN ({devices})
-                AND states.state != 'unavailable'
-                AND states.entity_id IN (
-                    SELECT entity_id
-                    FROM states
-                    WHERE state != 'unavailable'
-                    GROUP BY entity_id
-                    HAVING COUNT(*) > 50
-                )
-            ORDER BY states.entity_id, states.last_updated DESC
-            LIMIT 150; 
-        """.format(devices=str(tsh_config.devices)[1:-1])
+        query = f"SELECT \
+            states.state_id AS state_id, \
+            states_meta.entity_id AS entity_id, \
+            states.state AS state, \
+            states.last_updated_ts AS last_updated, \
+            states.old_state_id AS old_state_id \
+        FROM states \
+        JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
+        WHERE states_meta.entity_id IN ({str(tsh_config.devices)[1:-1]}) \
+            AND states.state != 'unavailable' \
+            AND states_meta.entity_id IN ( \
+                SELECT states_meta.entity_id \
+                FROM states \
+                JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
+                WHERE states.state != 'unavailable' \
+                AND states.last_updated_ts IS NOT NULL \
+                AND states.old_state_id IS NOT NULL \
+                GROUP BY states_meta.entity_id \
+            ) \
+        ORDER BY states.last_updated_ts DESC;"
 
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)

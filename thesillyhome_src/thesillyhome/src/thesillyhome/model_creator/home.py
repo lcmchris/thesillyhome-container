@@ -1,23 +1,12 @@
 # Library imports
 from datetime import datetime
-import mysql.connector
-import psycopg2
 import pandas as pd
-import os.path
-import os
 import logging
 from sqlalchemy import create_engine
-import bcrypt
 import json
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
-
-
-"""
-  Get data from DB and store locally
-"""
-
 
 class homedb:
     def __init__(self):
@@ -56,25 +45,27 @@ class homedb:
             return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
         logging.info("Executing query")
 
-        query = f"SELECT \
-            states.state_id AS state_id, \
-            states_meta.entity_id AS entity_id, \
-            states.state AS state, \
-            states.last_updated_ts AS last_updated_ts, \
-            states.old_state_id AS old_state_id \
-        FROM states \
-        JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-        WHERE states_meta.entity_id IN ({str(tsh_config.devices)[1:-1]}) \
-            AND states.state != 'unavailable' \
-            AND states_meta.entity_id IN ( \
-                SELECT states_meta.entity_id \
-                FROM states \
-                JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-                WHERE states.state != 'unavailable' \
-                GROUP BY states_meta.entity_id \
-                HAVING COUNT(*) > 50 \
-            ) \
-        ORDER BY states_meta.entity_id;"
+        query = """
+            SELECT
+                states.state_id AS state_id,
+                states.entity_id AS entity_id,
+                states.state AS state,
+                states.last_updated AS last_updated_ts,
+                states.old_state_id AS old_state_id
+            FROM states
+            JOIN state_attributes ON states.attributes_id = state_attributes.attributes_id
+            WHERE states.entity_id IN ({devices})
+                AND states.state != 'unavailable'
+                AND states.entity_id IN (
+                    SELECT entity_id
+                    FROM states
+                    WHERE state != 'unavailable'
+                    GROUP BY entity_id
+                    HAVING COUNT(*) > 50
+                )
+            ORDER BY states.entity_id, states.last_updated DESC
+            LIMIT 1000;  -- Adjust this limit as needed
+        """.format(devices=str(tsh_config.devices)[1:-1])
 
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)

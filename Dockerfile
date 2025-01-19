@@ -1,6 +1,6 @@
 FROM python:3.9-slim-bullseye AS compile-image
 
-RUN apt-get update && apt-get install -y curl bash && \
+RUN apt-get update && apt-get install -y curl nano bash && \
     curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
     apt-get install -y \
     build-essential \

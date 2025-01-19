@@ -30,5 +30,6 @@ jobs:
       with:
         context: "{{defaultContext}}"
         push: true
-        tags: lightningpicture/aarch64-thesillyhome-dev:dev-34
+        tags: lightningpicture/aarch64-thesillyhome-dev:dev-35
+
 

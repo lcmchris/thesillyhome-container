@@ -7,7 +7,8 @@ RUN apt-get update && apt-get install -y curl nano bash && \
     libffi-dev \
     libpq-dev \
     nodejs \
-    gfortran
+    gfortran \
+    nano
 
 ARG PIP_EXTRA_INDEX_URL=https://www.piwheels.org/simple
 

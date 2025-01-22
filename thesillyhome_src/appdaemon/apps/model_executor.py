@@ -115,7 +115,7 @@ class ModelExecutor(hass.Hass):
                     self.log(f"---{entity} ist manuell gesperrt. Automatische Aktion ignoriert.")
                     return
 
-                if old != new:
+                if old != new and not self.manual_override.get(entity, False):
                     self.manual_override[entity] = True
                     self.run_in(self.clear_override, 300, entity=entity)
 
@@ -161,10 +161,10 @@ class ModelExecutor(hass.Hass):
                         rule_to_verify["entity_id"] = act
 
                         if self.verify_rules(act, rule_to_verify, prediction, all_rules):
-                            if (prediction == 1) and (self.get_state(act) != "on"):
+                            if (prediction == 1) and (self.get_state(act) != "on") and not self.manual_override.get(act, False):
                                 self.log(f"---Turn on {act}")
                                 self.turn_on(act)
-                            elif (prediction == 0) and (self.get_state(act) != "off"):
+                            elif (prediction == 0) and (self.get_state(act) != "off") and not self.manual_override.get(act, False):
                                 self.log(f"---Turn off {act}")
                                 self.turn_off(act)
                             else:

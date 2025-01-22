@@ -19,7 +19,8 @@ class ModelExecutor(hass.Hass):
         self.device_states = {}
         self.manual_override = {}
         self.error_log = []
-
+        self.previous_light_states = {}
+        self.learning_data = {}
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
@@ -84,6 +85,13 @@ class ModelExecutor(hass.Hass):
         self.manual_override[entity] = False
         self.log(f"---Manuelle Sperre für {entity} aufgehoben.")
 
+    def adjust_model_score(self, entity, was_prediction_wrong):
+        if was_prediction_wrong and entity in self.act_model_set:
+            model = self.act_model_set[entity]
+            # Adjust the score of the model (simplified example, real implementation might vary)
+            model.adjust_score(-1)  # Placeholder for actual logic
+            self.log(f"---Model score for {entity} adjusted due to manual override.")
+
     def verify_rules(self, act, rules_to_verify, prediction, all_rules):
         relevant_rules = all_rules[(all_rules["entity_id"] == act) & (all_rules["state"] != prediction)]
 
@@ -92,6 +100,37 @@ class ModelExecutor(hass.Hass):
             return False
 
         return True
+
+    def manage_lighting(self, entity, action):
+        if action == "enter":
+            # Save current state before changing
+            current_state = {
+                "brightness": self.get_state(entity, attribute="brightness"),
+                "color": self.get_state(entity, attribute="color")
+            }
+            self.previous_light_states[entity] = current_state
+
+            # Set brightness to 100% and alternative color
+            alt_color = self.learning_data.get(entity, {}).get("bright_color", "white")
+            self.call_service("light/turn_on", entity_id=entity, brightness=255, color_name=alt_color)
+            self.log(f"---Set {entity} to 100% brightness and color {alt_color}.")
+
+        elif action == "exit":
+            # Restore previous state
+            if entity in self.previous_light_states:
+                prev_state = self.previous_light_states[entity]
+                dim_color = self.learning_data.get(entity, {}).get("dim_color", prev_state["color"])
+                self.call_service("light/turn_on", entity_id=entity, brightness=prev_state["brightness"], color_name=dim_color)
+                self.log(f"---Restored {entity} to brightness {prev_state['brightness']} and color {dim_color}.")
+
+    def record_lighting_preference(self, entity, bright_color=None, dim_color=None):
+        if entity not in self.learning_data:
+            self.learning_data[entity] = {}
+        if bright_color:
+            self.learning_data[entity]["bright_color"] = bright_color
+        if dim_color:
+            self.learning_data[entity]["dim_color"] = dim_color
+        self.log(f"---Recorded lighting preferences for {entity}: {self.learning_data[entity]}.")
 
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
@@ -113,6 +152,7 @@ class ModelExecutor(hass.Hass):
 
                 if self.manual_override.get(entity, False):
                     self.log(f"---{entity} ist manuell gesperrt. Automatische Aktion ignoriert.")
+                    self.adjust_model_score(entity, was_prediction_wrong=True)
                     return
 
                 if old != new:

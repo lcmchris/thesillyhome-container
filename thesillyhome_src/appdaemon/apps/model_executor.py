@@ -1,3 +1,4 @@
+# Library imports
 import string
 import appdaemon.plugins.hass.hassapi as hass
 import pickle
@@ -12,36 +13,26 @@ import numpy as np
 import time
 import json
 
+# Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
+
 
 class ModelExecutor(hass.Hass):
     def initialize(self):
-        self.device_states = {}
-        self.manual_override = {}
-        self.error_log = []
-        self.previous_light_states = {}
-        self.learning_data = {}
-        self.pending_validation = {}  # Tracks pending validation for KI actions
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
         self.last_states = self.get_state()
         self.last_event_time = datetime.datetime.now()
         self.init_db()
-
-        for device in tsh_config.devices:
-            self.device_states[device] = {
-                "state": "off",
-                "changes": 0,
-                "last_changed": datetime.datetime.min
-            }
-
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
 
     def read_actuators(self):
         enabled_actuators = set()
-        with open("/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r") as f:
+        with open(
+            "/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r"
+        ) as f:
             metrics_data = json.load(f)
         for metric in metrics_data:
             if metric["model_enabled"]:
@@ -50,6 +41,9 @@ class ModelExecutor(hass.Hass):
         return enabled_actuators
 
     def init_db(self):
+        """
+        Initialize db with all potential hot encoded features.
+        """
         with sql.connect(self.states_db) as con:
             feature_list = self.get_base_columns()
             feature_list = self.unverified_features(feature_list)
@@ -65,6 +59,9 @@ class ModelExecutor(hass.Hass):
                 self.log(f"DB already exists. Skipping", level="INFO")
 
     def unverified_features(self, feature_list):
+        """
+        There are features that shouldn't be verified. hour_, weekday_, last_state_
+        """
         feature_list = self.get_new_feature_list(feature_list, "hour_")
         feature_list = self.get_new_feature_list(feature_list, "last_state_")
         feature_list = self.get_new_feature_list(feature_list, "weekday_")
@@ -72,32 +69,191 @@ class ModelExecutor(hass.Hass):
 
         return feature_list
 
-    def log_error(self, entity, action, reason):
-        self.error_log.append({
-            "entity": entity,
-            "action": action,
-            "reason": reason,
-            "timestamp": datetime.datetime.now()
-        })
-        self.log(f"Fehler für {entity}: {reason}")
+    def verify_rules(
+        self,
+        act: string,
+        rules_to_verify: pd.DataFrame,
+        prediction: int,
+        all_rules: pd.DataFrame,
+    ):
 
-    def clear_override(self, kwargs):
-        entity = kwargs["entity"]
-        self.manual_override[entity] = False
-        self.log(f"---Manuelle Sperre für {entity} aufgehoben.")
+        """
+        Check states when making an action based on prediction.
+        For an Actuator, don't execute predction when there is a case
+        where the same state is seen in the rules, but the state is different
+        """
+        self.log("Executing: verify_rules")
 
-    def adjust_model_score(self, entity, was_prediction_wrong):
-        if was_prediction_wrong and entity in self.act_model_set:
-            model = self.act_model_set[entity]
-            # Adjust the score of the model (simplified example, real implementation might vary)
-            model.adjust_score(-1)  # Placeholder for actual logic
-            self.log(f"---Model score for {entity} adjusted due to manual override.")
+        t = time.process_time()
+        all_rules = all_rules[all_rules["entity_id"] == act]
 
-    def validate_ki_action(self, kwargs):
-        entity = kwargs["entity"]
-        if entity in self.pending_validation:
-            self.log(f"---KI action for {entity} validated as correct.")
-            del self.pending_validation[entity]
+        if not all_rules.empty:
+            matching_rule = all_rules.merge(rules_to_verify)
+            assert len(matching_rule) in [
+                0,
+                1,
+                2,
+            ], "        More than 2 matching rules.  Please reach out in https://discord.gg/bCM2mX9S for assistance."
+            rules_state = matching_rule["state"].values
+
+            if len(matching_rule) == 2:
+                self.log(f"--- These set of features are ambigious. Do nothing.")
+                elapsed_time = time.process_time() - t
+                self.log(f"---verify_rules took: {elapsed_time}")
+                return False
+
+            elif (len(matching_rule) == 1) and (rules_state != prediction):
+                self.log(
+                    f"--- This will not be executed as it is part of the excluded rules."
+                )
+                elapsed_time = time.process_time() - t
+                self.log(f"---verify_rules took: {elapsed_time}")
+                return False
+            else:
+                elapsed_time = time.process_time() - t
+                self.log(f"---verify_rules took: {elapsed_time}")
+                self.log("      No matching rules")
+                return True
+        else:
+            elapsed_time = time.process_time() - t
+            self.log(f"---verify_rules took: {elapsed_time}")
+            self.log(f"--- No matching rules, empty DB for {act}")
+            return True
+
+    def add_manual_rule(self, actuator, new_state):
+        """
+        Add a rule to the database when manual interaction is detected.
+        """
+        self.log(f"Adding manual rule for {actuator} with state {new_state}")
+
+        # Get the current state of all sensors and create a new rule
+        feature_list = self.get_base_columns()
+        df_sen_states = pd.DataFrame(columns=feature_list)
+        df_sen_states.loc[0] = 0
+
+        for sensor in tsh_config.sensors:
+            true_state = self.get_state(entity_id=sensor)
+            if sensor in tsh_config.float_sensors:
+                df_sen_states[sensor] = true_state
+            elif f"{sensor}_{true_state}" in df_sen_states.columns:
+                df_sen_states[f"{sensor}_{true_state}"] = 1
+
+        # Add time-based features
+        now = datetime.datetime.now()
+        df_sen_states[f"hour_{now.hour}"] = 1
+        df_sen_states[f"weekday_{now.weekday()}"] = 1
+
+        # Add actuator and state to the rule
+        df_sen_states["entity_id"] = actuator
+        df_sen_states["state"] = new_state
+
+        with sql.connect(self.states_db) as con:
+            # Append the new rule to the database
+            try:
+                df_sen_states.to_sql("rules_engine", con=con, if_exists="append")
+                self.log(f"Manual rule added for {actuator}.")
+            except Exception as e:
+                self.log(f"Failed to add manual rule: {e}", level="ERROR")
+
+    def add_rules(
+        self,
+        training_time: datetime.datetime,
+        actuator: string,
+        new_state: int,
+        new_rule: pd.DataFrame,
+        all_rules: pd.DataFrame,
+    ):
+        """
+        Add a new rule to the rules engine if:
+        1) New Actuator activity occurs
+        2) All the states are the same as last states
+        3) Time past within training_time.
+
+        Rule will include - states of all entities, except for the actuator - entity_id and state.
+
+        No return
+        """
+        self.log("Executing: add_rules")
+        t = time.process_time()
+
+        utc = pytz.UTC
+        last_states = self.last_states
+
+        last_states_tmp = last_states.copy()
+        current_states_tmp = self.get_state()
+        last_states_tmp = {
+            your_key: last_states_tmp[your_key] for your_key in tsh_config.devices
+        }
+        current_states_tmp = {
+            your_key: current_states_tmp[your_key] for your_key in tsh_config.devices
+        }
+        del last_states_tmp[actuator]
+        del current_states_tmp[actuator]
+
+        states_no_change = last_states_tmp == current_states_tmp
+
+        last_update_time = datetime.datetime.strptime(
+            last_states[actuator]["last_updated"], "%Y-%m-%dT%H:%M:%S.%f%z"
+        )
+        now_minus_training_time = utc.localize(
+            datetime.datetime.now() - datetime.timedelta(seconds=training_time)
+        )
+
+        if (
+            states_no_change
+            and last_states[actuator]["state"] != new_state
+            and last_update_time > now_minus_training_time
+        ):
+            new_rule["state"] = np.where(new_rule["state"] == "on", 1, 0)
+            new_all_rules = pd.concat([all_rules, new_rule]).drop_duplicates()
+
+            if not new_all_rules.equals(all_rules):
+                self.log(f"---Adding new rule for {actuator}")
+
+                with sql.connect(self.states_db) as con:
+                    new_rule.to_sql("rules_engine", con=con, if_exists="append")
+            else:
+                self.log(f"---Rule already exists for {actuator}")
+        else:
+            elapsed_time = time.process_time() - t
+            self.log(f"---add_rules {elapsed_time}")
+            self.log(f"---Rules not added")
+
+    def load_models(self):
+        """
+        Loads all models to a dictionary
+        """
+        actuators = tsh_config.actuators
+        act_model_set = {}
+        for act in actuators:
+            if os.path.isfile(f"{tsh_config.data_dir}/model/{act}/best_model.pkl"):
+                with open(
+                    f"{tsh_config.data_dir}/model/{act}/best_model.pkl",
+                    "rb",
+                ) as pickle_file:
+                    content = pickle.load(pickle_file)
+                    act_model_set[act] = content
+            else:
+                logging.info(f"No model for {act}")
+        return act_model_set
+
+    def get_base_columns(self):
+        # Get feature list from parsed data header, set all columns to 0
+        base_columns = pd.read_pickle(
+            f"{tsh_config.data_dir}/parsed/act_states.pkl"
+        ).columns
+        base_columns = sorted(
+            list(set(base_columns) - set(["entity_id", "state", "duplicate"]))
+        )
+        return base_columns
+
+    def get_new_feature_list(self, feature_list: list, device: string):
+        cur_list = []
+        for feature in feature_list:
+            if feature.startswith(device):
+                cur_list.append(feature)
+        new_feature_list = sorted(list(set(feature_list) - set(cur_list)))
+        return new_feature_list
 
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
@@ -110,39 +266,18 @@ class ModelExecutor(hass.Hass):
             self.log(f"\n")
             self.log(f"<--- {entity} is {new} --->")
 
-            if entity in actuators:
-                device_state = self.device_states[entity]
+            # Detect manual state change
+            if entity in actuators and old != new:
+                self.log(f"Manual change detected for {entity}: {old} -> {new}")
+                self.add_manual_rule(entity, new)
 
-                if device_state["state"] == "on" and new == "off" and device_state["changes"] >= 2:
-                    self.log(f"---Maximale Ausschaltversuche für {entity} erreicht. Ignoriere.")
-                    return
-
-                if self.manual_override.get(entity, False):
-                    self.log(f"---{entity} ist manuell gesperrt. Automatische Aktion ignoriert.")
-                    self.adjust_model_score(entity, was_prediction_wrong=True)
-                    return
-
-                if old != new:
-                    # Detect manual overrides
-                    if entity in self.pending_validation:
-                        self.log(f"---KI action for {entity} was overridden manually. Adjusting model score.")
-                        self.adjust_model_score(entity, was_prediction_wrong=True)
-                        del self.pending_validation[entity]
-                    else:
-                        self.manual_override[entity] = True
-                        self.run_in(self.clear_override, 300, entity=entity)
-
-                    device_state["state"] = new
-                    if new != old:
-                        device_state["changes"] += 1
-                        device_state["last_changed"] = datetime.datetime.now()
-
-                self.device_states[entity] = device_state
-
+            # Get feature list from parsed data header, set all columns to 0
             feature_list = self.get_base_columns()
+
             current_state_base = pd.DataFrame(columns=feature_list)
             current_state_base.loc[0] = 0
 
+            # Get current state of all sensors for model input
             df_sen_states = copy.deepcopy(current_state_base)
             for sensor in sensors:
                 true_state = self.get_state(entity_id=sensor)
@@ -153,92 +288,79 @@ class ModelExecutor(hass.Hass):
                     if (true_state) in df_sen_states.columns:
                         df_sen_states[sensor] = true_state
 
+            last_states = self.last_states
+            all_states = self.get_state()
+
+            # Extract current date
+            # datetime object containing current date and time
+            # dd/mm/YY H:M:S
             df_sen_states[f"hour_{now.hour}"] = 1
             df_sen_states[f"weekday_{now.weekday()}"] = 1
-            self.log(f"Time is : hour_{now.hour} & weekday_{now.weekday()}", level="DEBUG")
+            self.log(
+                f"Time is : hour_{now.hour} & weekday_{now.weekday()}", level="DEBUG"
+            )
 
+            # Check rules for actuators against rules engine
             with sql.connect(self.states_db) as con:
-                all_rules = pd.read_sql(f"SELECT * FROM rules_engine", con=con).drop(columns=["index"])
+                all_rules = pd.read_sql(
+                    f"SELECT * FROM rules_engine",
+                    con=con,
+                )
+                all_rules = all_rules.drop(columns=["index"])
 
             enabled_actuators = self.read_actuators()
+            if entity in actuators:
+                # Adding rules
+                new_rule = df_sen_states.copy()
+                # Don't check the device's state itself
+                new_rule = new_rule[self.get_new_feature_list(feature_list, entity)]
+                new_rule = new_rule[
+                    self.unverified_features(new_rule.columns.values.tolist())
+                ]
+                new_rule["entity_id"] = entity
+                new_rule["state"] = new
+                training_time = 10
+                self.add_rules(training_time, entity, new, new_rule, all_rules)
+
+            # Execute all models for sensor and set states
             if entity in sensors:
                 for act, model in self.act_model_set.items():
                     if act in enabled_actuators:
                         self.log(f"Prediction sequence for: {act}")
 
-                        df_sen_states_less = df_sen_states[self.get_new_feature_list(feature_list, act)]
+                        # the actuators feature state should not affect the model and also the duplicate column
+                        df_sen_states_less = df_sen_states[
+                            self.get_new_feature_list(feature_list, act)
+                        ]
+
                         prediction = model.predict(df_sen_states_less)
 
                         rule_to_verify = df_sen_states_less.copy()
-                        rule_to_verify = rule_to_verify[self.unverified_features(rule_to_verify.columns.values.tolist())]
+                        rule_to_verify = rule_to_verify[
+                            self.unverified_features(
+                                rule_to_verify.columns.values.tolist()
+                            )
+                        ]
                         rule_to_verify["entity_id"] = act
 
-                        if self.verify_rules(act, rule_to_verify, prediction, all_rules):
-                            if (prediction == 1) and (self.get_state(act) != "on"):
+                        if self.verify_rules(
+                            act, rule_to_verify, prediction, all_rules
+                        ):
+                            # Execute actions
+                            self.log(
+                                f"---Predicted {act} as {prediction}", level="INFO"
+                            )
+                            if (prediction == 1) and (all_states[act]["state"] != "on"):
                                 self.log(f"---Turn on {act}")
                                 self.turn_on(act)
-                                self.pending_validation[act] = True
-                                self.run_in(self.validate_ki_action, 60, entity=act)
-                            elif (prediction == 0) and (self.get_state(act) != "off"):
+                            elif (prediction == 0) and (
+                                all_states[act]["state"] != "off"
+                            ):
                                 self.log(f"---Turn off {act}")
                                 self.turn_off(act)
-                                self.pending_validation[act] = True
-                                self.run_in(self.validate_ki_action, 60, entity=act)
                             else:
                                 self.log(f"---{act} state has not changed.")
+                    else:
+                        self.log("Ignore Disabled actuator")
 
-    def add_rules(self, training_time, actuator, new_state, new_rule, all_rules):
-        self.log("Executing: add_rules")
-        t = time.process_time()
-
-        utc = pytz.UTC
-        last_states = self.last_states
-
-        last_states_tmp = last_states.copy()
-        current_states_tmp = self.get_state()
-        last_states_tmp = {key: last_states_tmp[key] for key in tsh_config.devices}
-        current_states_tmp = {key: current_states_tmp[key] for key in tsh_config.devices}
-        del last_states_tmp[actuator]
-        del current_states_tmp[actuator]
-
-        states_no_change = last_states_tmp == current_states_tmp
-
-        last_update_time = datetime.datetime.strptime(last_states[actuator]["last_updated"], "%Y-%m-%dT%H:%M:%S.%f%z")
-        now_minus_training_time = utc.localize(datetime.datetime.now() - datetime.timedelta(seconds=training_time))
-
-        if states_no_change and last_states[actuator]["state"] != new_state and last_update_time > now_minus_training_time:
-            new_rule["state"] = np.where(new_rule["state"] == "on", 1, 0)
-            new_all_rules = pd.concat([all_rules, new_rule]).drop_duplicates()
-
-            if not new_all_rules.equals(all_rules):
-                self.log(f"---Adding new rule for {actuator}")
-                with sql.connect(self.states_db) as con:
-                    new_rule.to_sql("rules_engine", con=con, if_exists="append")
-            else:
-                self.log(f"---Rule already exists for {actuator}")
-        else:
-            elapsed_time = time.process_time() - t
-            self.log(f"---add_rules {elapsed_time}")
-            self.log(f"---Rules not added")
-
-    def load_models(self):
-        actuators = tsh_config.actuators
-        act_model_set = {}
-        for act in actuators:
-            if os.path.isfile(f"{tsh_config.data_dir}/model/{act}/best_model.pkl"):
-                with open(f"{tsh_config.data_dir}/model/{act}/best_model.pkl", "rb") as pickle_file:
-                    content = pickle.load(pickle_file)
-                    act_model_set[act] = content
-            else:
-                logging.info(f"No model for {act}")
-        return act_model_set
-
-    def get_base_columns(self):
-        base_columns = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").columns
-        base_columns = sorted(list(set(base_columns) - set(["entity_id", "state", "duplicate"])))
-        return base_columns
-
-    def get_new_feature_list(self, feature_list, device):
-        cur_list = [feature for feature in feature_list if feature.startswith(device)]
-        new_feature_list = sorted(list(set(feature_list) - set(cur_list)))
-        return new_feature_list
+            self.last_states = self.get_state()

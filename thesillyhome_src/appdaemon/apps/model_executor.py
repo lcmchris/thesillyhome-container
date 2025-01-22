@@ -21,6 +21,7 @@ class ModelExecutor(hass.Hass):
         self.error_log = []
         self.previous_light_states = {}
         self.learning_data = {}
+        self.pending_validation = {}  # Tracks pending validation for KI actions
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
@@ -92,45 +93,11 @@ class ModelExecutor(hass.Hass):
             model.adjust_score(-1)  # Placeholder for actual logic
             self.log(f"---Model score for {entity} adjusted due to manual override.")
 
-    def verify_rules(self, act, rules_to_verify, prediction, all_rules):
-        relevant_rules = all_rules[(all_rules["entity_id"] == act) & (all_rules["state"] != prediction)]
-
-        if not relevant_rules.empty:
-            self.log_error(act, "rule_violation", "Regel verhindert Aktion")
-            return False
-
-        return True
-
-    def manage_lighting(self, entity, action):
-        if action == "enter":
-            # Save current state before changing
-            current_state = {
-                "brightness": self.get_state(entity, attribute="brightness"),
-                "color": self.get_state(entity, attribute="color")
-            }
-            self.previous_light_states[entity] = current_state
-
-            # Set brightness to 100% and alternative color
-            alt_color = self.learning_data.get(entity, {}).get("bright_color", "white")
-            self.call_service("light/turn_on", entity_id=entity, brightness=255, color_name=alt_color)
-            self.log(f"---Set {entity} to 100% brightness and color {alt_color}.")
-
-        elif action == "exit":
-            # Restore previous state
-            if entity in self.previous_light_states:
-                prev_state = self.previous_light_states[entity]
-                dim_color = self.learning_data.get(entity, {}).get("dim_color", prev_state["color"])
-                self.call_service("light/turn_on", entity_id=entity, brightness=prev_state["brightness"], color_name=dim_color)
-                self.log(f"---Restored {entity} to brightness {prev_state['brightness']} and color {dim_color}.")
-
-    def record_lighting_preference(self, entity, bright_color=None, dim_color=None):
-        if entity not in self.learning_data:
-            self.learning_data[entity] = {}
-        if bright_color:
-            self.learning_data[entity]["bright_color"] = bright_color
-        if dim_color:
-            self.learning_data[entity]["dim_color"] = dim_color
-        self.log(f"---Recorded lighting preferences for {entity}: {self.learning_data[entity]}.")
+    def validate_ki_action(self, kwargs):
+        entity = kwargs["entity"]
+        if entity in self.pending_validation:
+            self.log(f"---KI action for {entity} validated as correct.")
+            del self.pending_validation[entity]
 
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
@@ -156,8 +123,14 @@ class ModelExecutor(hass.Hass):
                     return
 
                 if old != new:
-                    self.manual_override[entity] = True
-                    self.run_in(self.clear_override, 300, entity=entity)
+                    # Detect manual overrides
+                    if entity in self.pending_validation:
+                        self.log(f"---KI action for {entity} was overridden manually. Adjusting model score.")
+                        self.adjust_model_score(entity, was_prediction_wrong=True)
+                        del self.pending_validation[entity]
+                    else:
+                        self.manual_override[entity] = True
+                        self.run_in(self.clear_override, 300, entity=entity)
 
                     device_state["state"] = new
                     if new != old:
@@ -204,9 +177,13 @@ class ModelExecutor(hass.Hass):
                             if (prediction == 1) and (self.get_state(act) != "on"):
                                 self.log(f"---Turn on {act}")
                                 self.turn_on(act)
+                                self.pending_validation[act] = True
+                                self.run_in(self.validate_ki_action, 60, entity=act)
                             elif (prediction == 0) and (self.get_state(act) != "off"):
                                 self.log(f"---Turn off {act}")
                                 self.turn_off(act)
+                                self.pending_validation[act] = True
+                                self.run_in(self.validate_ki_action, 60, entity=act)
                             else:
                                 self.log(f"---{act} state has not changed.")
 

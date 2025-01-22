@@ -24,8 +24,6 @@ class ModelExecutor(hass.Hass):
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
         self.last_states = self.get_state()
         self.last_event_time = datetime.datetime.now()
-        self.manual_override = {}
-        self.action_counters = {}
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
@@ -78,7 +76,6 @@ class ModelExecutor(hass.Hass):
         prediction: int,
         all_rules: pd.DataFrame,
     ):
-
 
         """
         Check states when making an action based on prediction.
@@ -232,74 +229,16 @@ class ModelExecutor(hass.Hass):
         new_feature_list = sorted(list(set(feature_list) - set(cur_list)))
         return new_feature_list
 
-        """
-        Check states when making an action based on prediction.
-        Added rules for manual override priority and action frequency.
-        """
-        self.log("Executing: verify_rules")
-
-        t = time.process_time()
-        all_rules = all_rules[all_rules["entity_id"] == act]
-
-        if act in self.manual_override:
-            override_time = self.manual_override[act]
-            if (datetime.datetime.now() - override_time).total_seconds() < 90:
-                self.log(f"Manual override active for {act}. Skipping execution.")
-                return False
-
-        if act in self.action_counters:
-            action_times = self.action_counters[act]
-            recent_actions = [
-                at for at in action_times if (datetime.datetime.now() - at).total_seconds() <= 30
-            ]
-            if len(recent_actions) >= 2:
-                self.log(f"{act} toggled more than twice in 30 seconds. Skipping execution.")
-                return False
-
-        if not all_rules.empty:
-            matching_rule = all_rules.merge(rules_to_verify)
-            assert len(matching_rule) in [
-                0,
-                1,
-                2,
-            ], "More than 2 matching rules. Please reach out for assistance."
-            rules_state = matching_rule["state"].values
-
-            if len(matching_rule) == 2:
-                self.log(f"--- These set of features are ambiguous. Do nothing.")
-                elapsed_time = time.process_time() - t
-                self.log(f"---verify_rules took: {elapsed_time}")
-                return False
-
-            elif (len(matching_rule) == 1) and (rules_state != prediction):
-                self.log(
-                    f"--- This will not be executed as it is part of the excluded rules."
-                )
-                elapsed_time = time.process_time() - t
-                self.log(f"---verify_rules took: {elapsed_time}")
-                return False
-            else:
-                elapsed_time = time.process_time() - t
-                self.log(f"---verify_rules took: {elapsed_time}")
-                self.log("      No matching rules")
-                return True
-        else:
-            elapsed_time = time.process_time() - t
-            self.log(f"---verify_rules took: {elapsed_time}")
-            self.log(f"--- No matching rules, empty DB for {act}")
-            return True
-
-
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
+        float_sensors = tsh_config.float_sensors
         devices = tsh_config.devices
         now = datetime.datetime.now()
 
         if entity in devices:
             self.log(f"\n")
             self.log(f"<--- {entity} is {new} --->")
-
 
             # Get feature list from parsed data header, set all columns to 0
             feature_list = self.get_base_columns()
@@ -337,15 +276,6 @@ class ModelExecutor(hass.Hass):
                     con=con,
                 )
                 all_rules = all_rules.drop(columns=["index"])
-
-            if entity in actuators:
-                if old != new:
-                    self.manual_override[entity] = now
-                    self.log(f"Manual override detected for {entity}. Suppressing KI for 90 seconds.")
-
-                    if entity not in self.action_counters:
-                        self.action_counters[entity] = []
-                    self.action_counters[entity].append(now)
 
             enabled_actuators = self.read_actuators()
             if entity in actuators:
@@ -403,20 +333,3 @@ class ModelExecutor(hass.Hass):
                         self.log("Ignore Disabled actuator")
 
             self.last_states = self.get_state()
-
-                        df_sen_states = self.get_sensor_states(entity, sensors)
-                        prediction = model.predict(df_sen_states)
-                        if self.verify_rules(act, df_sen_states, prediction, all_rules):
-                            self.execute_action(act, prediction)
-
-    def execute_action(self, act, prediction):
-        all_states = self.get_state()
-        if prediction == 1 and all_states[act]["state"] != "on":
-            self.log(f"---Turn on {act}")
-            self.turn_on(act)
-        elif prediction == 0 and all_states[act]["state"] != "off":
-            self.log(f"---Turn off {act}")
-            self.turn_off(act)
-        else:
-            self.log(f"---{act} state has not changed.")
-

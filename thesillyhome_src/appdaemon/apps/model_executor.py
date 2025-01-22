@@ -12,6 +12,7 @@ import numpy as np
 import time
 import json
 
+# Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 class ModelExecutor(hass.Hass):

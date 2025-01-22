@@ -1,94 +1,31 @@
-# Library imports
-from datetime import datetime
-import mysql.connector
-import psycopg2
-import pandas as pd
-import os.path
 import os
-import logging
-from sqlalchemy import create_engine
-import bcrypt
 import json
+import datetime
+import pandas as pd
+import pickle
+import numpy as np
+from sqlalchemy import create_engine
 
-# Local application imports
-import thesillyhome.model_creator.read_config_json as tsh_config
+# home.py
+class HomeDB:
+    def __init__(self, config):
+        self.config = config
+        self.mydb = self.connect_db()
 
-
-"""
-  Get data from DB and store locally
-"""
-
-
-class homedb:
-    def __init__(self):
-        self.host = tsh_config.db_host
-        self.port = tsh_config.db_port
-        self.username = tsh_config.db_username
-        self.password = tsh_config.db_password
-        self.database = tsh_config.db_database
-        self.db_type = tsh_config.db_type
-        self.from_cache = False
-        self.mydb = self.connect_internal_db()
-
-    def connect_internal_db(self):
-        if not self.from_cache:
-            if self.db_type == "postgres":
-                mydb = create_engine(
-                    f"postgresql+psycopg2://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
-                    echo=False,
-                )
-            elif self.db_type == "mariadb":
-                mydb = create_engine(
-                    f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
-                    echo=False,
-                )
-            else:
-                raise Exception(f"Invalid DB type : {self.db_type}.")
-            return mydb
+    def connect_db(self):
+        if self.config["db_type"] == "postgres":
+            connection_string = f"postgresql+psycopg2://{self.config['db_username']}:{self.config['db_password']}@{self.config['db_host']}:{self.config['db_port']}/{self.config['db_database']}"
         else:
-            return None
+            connection_string = f"mysql+pymysql://{self.config['db_username']}:{self.config['db_password']}@{self.config['db_host']}:{self.config['db_port']}/{self.config['db_database']}"
+        return create_engine(connection_string, echo=False)
 
-    def get_data(self) -> pd.DataFrame:
-        logging.info("Getting data from internal homeassistant db")
-
-        if self.from_cache:
-            logging.info("Using cached all_states.pkl")
-            return pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
-        logging.info("Executing query")
-
-        query = f"SELECT \
-            states.state_id AS state_id, \
-            states_meta.entity_id AS entity_id, \
-            states.state AS state, \
-            states.last_updated_ts AS last_updated, \
-            states.old_state_id AS old_state_id \
-        FROM states \
-        JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-        WHERE states_meta.entity_id IN ({str(tsh_config.devices)[1:-1]}) \
-            AND states.state != 'unavailable' \
-            AND states_meta.entity_id IN ( \
-                SELECT states_meta.entity_id \
-                FROM states \
-                JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-                WHERE states.state != 'unavailable' \
-                AND states.last_updated_ts IS NOT NULL \
-                AND states.old_state_id IS NOT NULL \
-                GROUP BY states_meta.entity_id \
-            ) \
-        ORDER BY states.last_updated_ts DESC LIMIT 100000;"
-
-        with self.mydb.connect() as con:
-            con = con.execution_options(stream_results=True)
-            list_df = [
-                df
-                for df in pd.read_sql(
-                    query,
-                    con=con,
-                    index_col="state_id",
-                    parse_dates=["last_updated"],
-                    chunksize=1000,
-                )
-            ]
-            df_output = pd.concat(list_df)
-        df_output.to_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl")
-        return df_output
+    def fetch_data(self):
+        query = """
+            SELECT states.state_id, states_meta.entity_id, states.state, states.last_updated_ts
+            FROM states
+            JOIN states_meta ON states.metadata_id = states_meta.metadata_id
+            WHERE states.state != 'unavailable'
+            ORDER BY states.last_updated_ts DESC
+            LIMIT 100000;
+        """
+        return pd.read_sql(query, con=self.mydb)

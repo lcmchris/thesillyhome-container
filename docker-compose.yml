@@ -6,7 +6,7 @@ volumes:
 services:
   thesillyhome:
     container_name: thesillyhome
-    image: Lightningpicture/thesillyhome-container:ndev-11
+    image: Lightningpicture/thesillyhome-container:ndev-12
     restart: unless-stopped
     volumes:
       - thesillyhome_config:/thesillyhome_src/data/config/

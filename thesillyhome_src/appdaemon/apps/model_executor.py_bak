@@ -1,3 +1,4 @@
+# Library imports
 import string
 import appdaemon.plugins.hass.hassapi as hass
 import pickle
@@ -14,6 +15,7 @@ import json
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
+
 
 class ModelExecutor(hass.Hass):
     def initialize(self):
@@ -45,23 +47,16 @@ class ModelExecutor(hass.Hass):
         with sql.connect(self.states_db) as con:
             feature_list = self.get_base_columns()
             feature_list = self.unverified_features(feature_list)
-
-            # Add dynamic time-based columns
-            for hour in range(24):
-                feature_list.append(f"hour_{hour}")
-            for day in range(7):
-                feature_list.append(f"weekday_{day}")
-
             db_rules_engine = pd.DataFrame(columns=feature_list)
-            db_rules_engine.loc[0] = 0
+            db_rules_engine.loc[0] = 1
             db_rules_engine["entity_id"] = "dummy"
             db_rules_engine["state"] = 1
 
             self.log(f"Initialized rules engine DB", level="INFO")
             try:
                 db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
-            except Exception as e:
-                self.log(f"DB initialization failed: {e}", level="ERROR")
+            except:
+                self.log(f"DB already exists. Skipping", level="INFO")
 
     def unverified_features(self, feature_list):
         """
@@ -125,46 +120,6 @@ class ModelExecutor(hass.Hass):
             self.log(f"--- No matching rules, empty DB for {act}")
             return True
 
-    def add_manual_rule(self, actuator, new_state):
-        """
-        Add a rule to the database when manual interaction is detected.
-        """
-        self.log(f"Adding manual rule for {actuator} with state {new_state}")
-
-        # Get the current state of all sensors and create a new rule
-        feature_list = self.get_base_columns()
-        df_sen_states = pd.DataFrame(columns=feature_list)
-        df_sen_states.loc[0] = 0
-
-        for sensor in tsh_config.sensors:
-            true_state = self.get_state(entity_id=sensor)
-            if sensor in tsh_config.float_sensors:
-                df_sen_states[sensor] = true_state
-            elif f"{sensor}_{true_state}" in df_sen_states.columns:
-                df_sen_states[f"{sensor}_{true_state}"] = 1
-
-        # Add time-based features
-        now = datetime.datetime.now()
-        df_sen_states[f"hour_{now.hour}"] = 1
-        df_sen_states[f"weekday_{now.weekday()}"] = 1
-
-        # Add actuator and state to the rule
-        df_sen_states["entity_id"] = actuator
-        df_sen_states["state"] = new_state
-
-        with sql.connect(self.states_db) as con:
-            # Append the new rule to the database
-            existing_columns = pd.read_sql("PRAGMA table_info(rules_engine)", con)
-            missing_columns = set(df_sen_states.columns) - set(existing_columns["name"])
-            for col in missing_columns:
-                con.execute(f"ALTER TABLE rules_engine ADD COLUMN {col} INTEGER DEFAULT 0")
-
-            try:
-                df_sen_states.to_sql("rules_engine", con=con, if_exists="append")
-                self.log(f"Manual rule added for {actuator}.")
-            except Exception as e:
-                self.log(f"Failed to add manual rule: {e}", level="ERROR")
-
     def add_rules(
         self,
         training_time: datetime.datetime,
@@ -200,6 +155,9 @@ class ModelExecutor(hass.Hass):
         del last_states_tmp[actuator]
         del current_states_tmp[actuator]
 
+        # self.log(last_states_tmp)
+        # self.log(current_states_tmp)
+
         states_no_change = last_states_tmp == current_states_tmp
 
         last_update_time = datetime.datetime.strptime(
@@ -207,6 +165,12 @@ class ModelExecutor(hass.Hass):
         )
         now_minus_training_time = utc.localize(
             datetime.datetime.now() - datetime.timedelta(seconds=training_time)
+        )
+        self.log(
+            f"---states_no_change: {states_no_change}, last_state: {last_states[actuator]['state']} new_state: {new_state}"
+        )
+        self.log(
+            f"---last_update_time: {(utc.localize(datetime.datetime.now()) - last_update_time)}"
         )
 
         if (
@@ -276,11 +240,6 @@ class ModelExecutor(hass.Hass):
             self.log(f"\n")
             self.log(f"<--- {entity} is {new} --->")
 
-            # Detect manual state change
-            if entity in actuators and old != new:
-                self.log(f"Manual change detected for {entity}: {old} -> {new}")
-                self.add_manual_rule(entity, new)
-
             # Get feature list from parsed data header, set all columns to 0
             feature_list = self.get_base_columns()
 
@@ -302,6 +261,8 @@ class ModelExecutor(hass.Hass):
             all_states = self.get_state()
 
             # Extract current date
+            # datetime object containing current date and time
+            # dd/mm/YY H:M:S
             df_sen_states[f"hour_{now.hour}"] = 1
             df_sen_states[f"weekday_{now.weekday()}"] = 1
             self.log(

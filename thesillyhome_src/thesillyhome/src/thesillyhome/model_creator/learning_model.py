@@ -38,8 +38,7 @@ def to_labels(pos_probs, threshold):
 def optimization_fucntion(precision, recall):
     # convert to f score
     epsilon = 0.01
-    error_tolerance = 0.1  # Fehlertoleranz (10%)
-    optimizer = (2 * precision * recall) / ((0.5 * precision + recall + epsilon) * (1 + error_tolerance))
+    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
 
     # locate the index of the largest f score
     ix = np.argmax(optimizer)

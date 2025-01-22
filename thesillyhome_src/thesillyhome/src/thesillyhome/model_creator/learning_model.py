@@ -25,7 +25,7 @@ import thesillyhome.model_creator.read_config_json as tsh_config
 def save_visual_tree(model, actuator, feature_vector):
     # plot tree
     plt.figure(figsize=(12, 12))  # set plot size (denoted in inches)
-    plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=5)
+    plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=8)
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
 
@@ -114,7 +114,7 @@ def train_all_actuator_models():
         # Split into random training and test set
         X = feature_vector
         y = output_vector
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.76)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.75)
 
         # # Weighting more recent observations more. 3 times if in top 50 percent
         sample_weight = np.ones(len(X_train))

@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
 
+
 def save_visual_tree(model, actuator, feature_vector):
     # plot tree
     plt.figure(figsize=(12, 12))  # set plot size (denoted in inches)
@@ -28,19 +29,21 @@ def save_visual_tree(model, actuator, feature_vector):
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
 
+
 # apply threshold to positive probabilities to create labels
 def to_labels(pos_probs, threshold):
     return (pos_probs >= threshold).astype("int")
 
+
 def optimization_fucntion(precision, recall):
-    # Adjust weighting for precision and recall
-    beta = 0.5  # Lower weighting for precision
+    # convert to f score
     epsilon = 0.01
-    optimizer = (1 + beta**2) * (precision * recall) / (beta**2 * precision + recall + epsilon)
+    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
 
     # locate the index of the largest f score
     ix = np.argmax(optimizer)
     return ix, optimizer
+
 
 def train_all_actuator_models():
     """
@@ -59,19 +62,19 @@ def train_all_actuator_models():
     model_types = {
         "DecisionTreeClassifier": {
             "classifier": DecisionTreeClassifier,
-            "model_kwargs": {"max_depth": 5, "min_samples_split": 10},
+            "model_kwargs": {},
         },
         "LogisticRegression": {
             "classifier": LogisticRegression,
-            "model_kwargs": {"max_iter": 10000, "class_weight": "balanced"},
+            "model_kwargs": {"max_iter": 10000},
         },
         "RandomForestClassifier": {
             "classifier": RandomForestClassifier,
-            "model_kwargs": {"max_depth": 5, "n_estimators": 50, "class_weight": "balanced"},
+            "model_kwargs": {},
         },
         "SVMClassifier": {
             "classifier": SVC,
-            "model_kwargs": {"probability": True, "class_weight": "balanced"},
+            "model_kwargs": {"probability": True},
         },
     }
 
@@ -152,6 +155,7 @@ def train_all_actuator_models():
     )
 
     logging.info("Completed!")
+
 
 def train_all_classifiers(
     model_types,
@@ -253,6 +257,7 @@ def train_all_classifiers(
         f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png"
     )
     plt.close()
+
 
 if __name__ == "__main__":
     FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

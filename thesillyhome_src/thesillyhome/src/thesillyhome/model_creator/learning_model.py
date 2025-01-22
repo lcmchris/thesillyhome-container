@@ -90,8 +90,8 @@ def train_all_actuator_models():
             logging.info(f"No cases found for {actuator}")
             continue
 
-        if len(df_act) < 30:
-            logging.info("Samples less than 30. Skipping")
+        if len(df_act) < 60:
+            logging.info("Samples less than 60. Skipping")
             continue
 
         if df_act["state"].nunique() == 1:
@@ -114,7 +114,7 @@ def train_all_actuator_models():
         # Split into random training and test set
         X = feature_vector
         y = output_vector
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.1)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.76)
 
         # # Weighting more recent observations more. 3 times if in top 50 percent
         sample_weight = np.ones(len(X_train))

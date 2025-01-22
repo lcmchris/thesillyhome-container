@@ -64,18 +64,8 @@ class homedb:
             states.old_state_id AS old_state_id \
         FROM states \
         JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-        WHERE states_meta.entity_id IN ({str(tsh_config.devices)[1:-1]}) \
-            AND states.state != 'unavailable' \
-            AND states_meta.entity_id IN ( \
-                SELECT states_meta.entity_id \
-                FROM states \
-                JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
-                WHERE states.state != 'unavailable' \
-                AND states.last_updated_ts IS NOT NULL \
-                AND states.old_state_id IS NOT NULL \
-                GROUP BY states_meta.entity_id \
-            ) \
-        ORDER BY states.last_updated_ts DESC LIMIT 10000;"
+        WHERE states_meta.entity_id IN ({', '.join(str(tsh_config.devices)[1:-1].split(', '))}) \
+        ORDER BY last_updated_ts DESC LIMIT 100000;"
 
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)

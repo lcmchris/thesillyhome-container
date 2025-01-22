@@ -25,7 +25,7 @@ import thesillyhome.model_creator.read_config_json as tsh_config
 def save_visual_tree(model, actuator, feature_vector):
     # plot tree
     plt.figure(figsize=(12, 12))  # set plot size (denoted in inches)
-    plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=5)
+    plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=8)
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
 

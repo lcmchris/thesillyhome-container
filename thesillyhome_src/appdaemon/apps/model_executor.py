@@ -44,20 +44,19 @@ class ModelExecutor(hass.Hass):
         """
         Initialize db with all potential hot encoded features.
         """
-        try:
-            with sql.connect(self.states_db) as con:
-                feature_list = self.get_base_columns()
-                feature_list = self.unverified_features(feature_list)
-                db_rules_engine = pd.DataFrame(columns=feature_list)
-                db_rules_engine.loc[0] = 1
-                db_rules_engine["entity_id"] = "dummy"
-                db_rules_engine["state"] = 1
+        with sql.connect(self.states_db) as con:
+            feature_list = self.get_base_columns()
+            feature_list = self.unverified_features(feature_list)
+            db_rules_engine = pd.DataFrame(columns=feature_list)
+            db_rules_engine.loc[0] = 1
+            db_rules_engine["entity_id"] = "dummy"
+            db_rules_engine["state"] = 1
 
-                self.log("Initialized rules engine DB", level="INFO")
+            self.log(f"Initialized rules engine DB", level="INFO")
+            try:
                 db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
-                self.log("Table 'rules_engine' created successfully.", level="INFO")
-        except Exception as e:
-            self.log(f"Error creating 'rules_engine' table: {e}", level="ERROR")
+            except:
+                self.log(f"DB already exists. Skipping", level="INFO")
 
     def unverified_features(self, feature_list):
         """
@@ -272,15 +271,11 @@ class ModelExecutor(hass.Hass):
 
             # Check rules for actuators against rules engine
             with sql.connect(self.states_db) as con:
-                try:
-                    all_rules = pd.read_sql(
-                        f"SELECT * FROM rules_engine",
-                        con=con,
-                    )
-                    all_rules = all_rules.drop(columns=["index"])
-                except Exception as e:
-                    self.log(f"Error reading 'rules_engine' table: {e}", level="ERROR")
-                    all_rules = pd.DataFrame()
+                all_rules = pd.read_sql(
+                    f"SELECT * FROM rules_engine",
+                    con=con,
+                )
+                all_rules = all_rules.drop(columns=["index"])
 
             enabled_actuators = self.read_actuators()
             if entity in actuators:

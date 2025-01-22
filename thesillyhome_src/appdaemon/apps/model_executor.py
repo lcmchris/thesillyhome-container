@@ -1,4 +1,3 @@
-# Library imports
 import string
 import appdaemon.plugins.hass.hassapi as hass
 import pickle
@@ -15,7 +14,6 @@ import json
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
-
 
 class ModelExecutor(hass.Hass):
     def initialize(self):
@@ -47,16 +45,23 @@ class ModelExecutor(hass.Hass):
         with sql.connect(self.states_db) as con:
             feature_list = self.get_base_columns()
             feature_list = self.unverified_features(feature_list)
+
+            # Add dynamic time-based columns
+            for hour in range(24):
+                feature_list.append(f"hour_{hour}")
+            for day in range(7):
+                feature_list.append(f"weekday_{day}")
+
             db_rules_engine = pd.DataFrame(columns=feature_list)
-            db_rules_engine.loc[0] = 1
+            db_rules_engine.loc[0] = 0
             db_rules_engine["entity_id"] = "dummy"
             db_rules_engine["state"] = 1
 
             self.log(f"Initialized rules engine DB", level="INFO")
             try:
                 db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
-            except:
-                self.log(f"DB already exists. Skipping", level="INFO")
+            except Exception as e:
+                self.log(f"DB initialization failed: {e}", level="ERROR")
 
     def unverified_features(self, feature_list):
         """
@@ -149,6 +154,11 @@ class ModelExecutor(hass.Hass):
 
         with sql.connect(self.states_db) as con:
             # Append the new rule to the database
+            existing_columns = pd.read_sql("PRAGMA table_info(rules_engine)", con)
+            missing_columns = set(df_sen_states.columns) - set(existing_columns["name"])
+            for col in missing_columns:
+                con.execute(f"ALTER TABLE rules_engine ADD COLUMN {col} INTEGER DEFAULT 0")
+
             try:
                 df_sen_states.to_sql("rules_engine", con=con, if_exists="append")
                 self.log(f"Manual rule added for {actuator}.")
@@ -292,8 +302,6 @@ class ModelExecutor(hass.Hass):
             all_states = self.get_state()
 
             # Extract current date
-            # datetime object containing current date and time
-            # dd/mm/YY H:M:S
             df_sen_states[f"hour_{now.hour}"] = 1
             df_sen_states[f"weekday_{now.weekday()}"] = 1
             self.log(

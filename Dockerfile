@@ -1,13 +1,14 @@
 FROM python:3.9-slim-bullseye AS compile-image
 
-RUN apt-get update && apt-get install -y curl bash && \
+RUN apt-get update && apt-get install -y curl nano bash && \
     curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
     apt-get install -y \
     build-essential \
     libffi-dev \
     libpq-dev \
     nodejs \
-    gfortran
+    gfortran \
+    nano
 
 ARG PIP_EXTRA_INDEX_URL=https://www.piwheels.org/simple
 
@@ -28,7 +29,7 @@ FROM python:3.9-slim-bullseye AS build-image
 
 RUN apt-get update && apt-get install -y curl bash && \
     curl -sL https://deb.nodesource.com/setup_16.x | bash - && \
-    apt-get install -y libpq-dev nodejs cron
+    apt-get install -y libpq-dev nodejs nano cron
 
 COPY --from=compile-image /opt/venv /opt/venv
 COPY --from=compile-image /thesillyhome_src /thesillyhome_src

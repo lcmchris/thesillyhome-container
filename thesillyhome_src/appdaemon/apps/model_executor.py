@@ -117,7 +117,7 @@ class ModelExecutor(hass.Hass):
 
                 if old != new and not self.manual_override.get(entity, False):
                     self.manual_override[entity] = True
-                    self.run_in(self.clear_override, 300, entity=entity)
+                    self.run_in(self.clear_override, 90, entity=entity)
 
                     device_state["state"] = new
                     if new != old:
@@ -211,6 +211,7 @@ class ModelExecutor(hass.Hass):
             if os.path.isfile(f"{tsh_config.data_dir}/model/{act}/best_model.pkl"):
                 with open(f"{tsh_config.data_dir}/model/{act}/best_model.pkl", "rb") as pickle_file:
                     content = pickle.load(pickle_file)
+                    content.probability_threshold = 0.6
                     act_model_set[act] = content
             else:
                 logging.info(f"No model for {act}")

@@ -122,7 +122,7 @@ class ModelExecutor(hass.Hass):
 
                 if old != new and not self.manual_override.get(entity, False):
                     self.manual_override[entity] = True
-                    self.run_in(self.clear_override, 90, entity=entity)
+                    self.run_in(self.clear_override, 3, entity=entity)
 
                     device_state["state"] = new
                     if new != old:

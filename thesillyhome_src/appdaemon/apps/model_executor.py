@@ -268,6 +268,10 @@ class ModelExecutor(hass.Hass):
                     if act in enabled_actuators:
                         self.log(f"Prediction sequence for: {act}")
 
+                        if self.is_automation_blocked(act):
+                            self.log(f"--- Automation for {act} is blocked. Skipping prediction.")
+                            continue
+
                         df_sen_states_less = df_sen_states[
                             self.get_new_feature_list(feature_list, act)
                         ]

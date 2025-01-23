@@ -20,6 +20,7 @@ class ModelExecutor(hass.Hass):
         self.device_states = {}
         self.manual_override = {}
         self.error_log = []
+        self.cached_actuators = set()  # Cache für `read_actuators`
 
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
@@ -45,7 +46,12 @@ class ModelExecutor(hass.Hass):
         for metric in metrics_data:
             if metric["model_enabled"]:
                 enabled_actuators.add(metric["actuator"])
-        self.log(f"Enabled Actuators: {enabled_actuators}")
+
+        # Nur loggen, wenn sich die Aktoren geändert haben
+        if enabled_actuators != self.cached_actuators:
+            self.log(f"Enabled Actuators: {enabled_actuators}")
+            self.cached_actuators = enabled_actuators  # Cache aktualisieren
+
         return enabled_actuators
 
     def init_db(self):

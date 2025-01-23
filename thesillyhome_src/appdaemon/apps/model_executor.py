@@ -23,7 +23,8 @@ class ModelExecutor(hass.Hass):
         self.last_states = self.get_state()
         self.last_event_time = datetime.datetime.now()
         self.scores = {act: 0.5 for act in tsh_config.actuators}
-        self.automation_block = {}  # Track block status for each actuator
+        self.automation_block = {}  # Track block status for automation
+        self.automation_history = {}  # Track state change history for each actuator
         self.automated_actions = {}  # Track automated actions for each actuator
         self.init_db()
         self.log("Hello from TheSillyHome")
@@ -193,6 +194,26 @@ class ModelExecutor(hass.Hass):
             return True
         return False
 
+    def record_automation_history(self, entity, state):
+        """Track state changes for detecting rapid toggling."""
+        if entity not in self.automation_history:
+            self.automation_history[entity] = []
+        self.automation_history[entity].append((time.time(), state))
+
+        # Keep only the last 10 seconds of history
+        self.automation_history[entity] = [
+            (t, s) for t, s in self.automation_history[entity] if time.time() - t <= 10
+        ]
+
+        # Check if there were 4 rapid toggles
+        if len(self.automation_history[entity]) >= 4:
+            self.log(f"--- Rapid toggling detected for {entity}. Blocking automation.")
+            self.block_automation(entity, 900)
+
+            # Decrease the score significantly for rapid toggling
+            self.scores[entity] = max(3.0, self.scores[entity] - 0.2)
+            self.log(f"--- Score for {entity} decreased due to rapid toggling. New score: {self.scores[entity]}")
+
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
@@ -212,11 +233,23 @@ class ModelExecutor(hass.Hass):
 
                 if self.automated_actions.get(entity):
                     self.log(f"--- {entity} state changed automatically.")
-                    self.scores[entity] += 0.1  # Reward for correct automation
+                    self.scores[entity] += 0.07  # Reward for correct automation
                     del self.automated_actions[entity]  # Clear the automated flag
                 else:
                     self.log(f"--- {entity} state changed manually.")
-                    self.scores[entity] -= 0.2  # Penalty for manual intervention
+                    self.record_manual_intervention(entity)
+
+                    # Check if manual intervention occurred within 90 seconds
+                    if self.was_recent_manual_intervention(entity):
+                        self.log(f"--- Manual intervention detected within 90 seconds. Decreasing score for {entity}.")
+                        self.scores[entity] = max(0.0, self.scores[entity] - 0.16)
+                        self.block_automation(entity, 900)  # Block automation for 900 seconds
+                    else:
+                        self.log(f"--- Manual intervention occurred after 90 seconds. No penalty applied.")
+
+            # Record state change for rapid toggling detection
+            if entity in actuators:
+                self.record_automation_history(entity, new)
 
             # Get feature list from parsed data header, set all columns to 0
             feature_list = self.get_base_columns()
@@ -268,6 +301,7 @@ class ModelExecutor(hass.Hass):
                     if act in enabled_actuators:
                         self.log(f"Prediction sequence for: {act}")
 
+                        # Check if automation is blocked
                         if self.is_automation_blocked(act):
                             self.log(f"--- Automation for {act} is blocked. Skipping prediction.")
                             continue
@@ -296,14 +330,12 @@ class ModelExecutor(hass.Hass):
                                 self.log(f"---Turn on {act}")
                                 self.automated_actions[act] = True
                                 self.turn_on(act)
-                                self.block_automation(act, 900)  # Block automation for 900 seconds
                             elif (prediction == 0) and (
                                 all_states[act]["state"] != "off"
                             ):
                                 self.log(f"---Turn off {act}")
                                 self.automated_actions[act] = True
                                 self.turn_off(act)
-                                self.block_automation(act, 900)  # Block automation for 900 seconds
                             else:
                                 self.log(f"---{act} state has not changed.")
                     else:

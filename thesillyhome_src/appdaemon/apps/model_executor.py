@@ -46,10 +46,6 @@ class ModelExecutor(hass.Hass):
         for metric in metrics_data:
             if metric["model_enabled"]:
                 enabled_actuators.add(metric["actuator"])
-
-        if enabled_actuators != getattr(self, "cached_actuators", set()):
-            self.log(f"Enabled Actuators: {enabled_actuators}")
-            self.cached_actuators = enabled_actuators
         return enabled_actuators
 
     def init_db(self):
@@ -72,7 +68,6 @@ class ModelExecutor(hass.Hass):
         feature_list = self.get_new_feature_list(feature_list, "last_state_")
         feature_list = self.get_new_feature_list(feature_list, "weekday_")
         feature_list = self.get_new_feature_list(feature_list, "switch")
-
         return feature_list
 
     def log_error(self, entity, action, reason):
@@ -98,96 +93,75 @@ class ModelExecutor(hass.Hass):
 
         return True
 
-def state_handler(self, entity, attribute, old, new, kwargs):
-    sensors = tsh_config.sensors
-    actuators = tsh_config.actuators
-    now = datetime.datetime.now()
+    def state_handler(self, entity, attribute, old, new, kwargs):
+        sensors = tsh_config.sensors
+        actuators = tsh_config.actuators
+        enabled_actuators = self.read_actuators()  # Nur aktivierte Aktoren
+        now = datetime.datetime.now()
 
-    if entity in actuators:
-        device_state = self.device_states.get(entity, {"state": "off", "changes": 0, "last_changed": datetime.datetime.min})
-        manual_intervention = False
+        # Verarbeite nur konfigurierte Sensoren und Aktoren
+        if entity not in sensors and entity not in actuators:
+            return  # Ignoriere nicht konfigurierte Sensoren und Aktoren
 
-        # Prüfen, ob die Statusänderung von der KI ausgelöst wurde
-        ki_triggered = self.manual_override.get(entity, False)
-
-        # Prüfen, ob die Statusänderung durch eine bekannte Automation ausgelöst wurde
-        automation_triggered = self.last_automation_trigger.get(entity, False)
-        if automation_triggered:
-            self.last_automation_trigger[entity] = False  # Automatisierung zurücksetzen
-
-        # Prüfen auf manuellen Eingriff
-        if not ki_triggered and not automation_triggered and old != new:
-            self.log(f"---Manueller Eingriff erkannt: {entity} wurde manuell geschaltet.")
-            manual_intervention = True
-            self.act_model_set[entity].probability_threshold += 0.15
-            self.act_model_set[entity].probability_threshold = min(self.act_model_set[entity].probability_threshold, 0.85)
-        
-        elif ki_triggered:
-            device_state["changes"] += 1
-            if device_state["changes"] > 3:
-                self.log(f"---Maximale Schaltversuche durch KI für {entity} erreicht. Blockiere KI für 90 Sekunden.")
-                self.manual_override[entity] = True
-                self.run_in(self.clear_override, 90, entity=entity)
-                self.act_model_set[entity].probability_threshold -= 0.09
-                self.act_model_set[entity].probability_threshold = max(self.act_model_set[entity].probability_threshold, 0.2)
-                return
-
-        # Update Gerätestatus
-        if old != new:
+        # Für Sensoren: Statusänderungen loggen
+        if entity in sensors and old != new:
             self.log(f"{entity} hat seinen Zustand geändert: {old} -> {new}")
-        device_state["state"] = new
-        device_state["last_changed"] = now
-        self.device_states[entity] = device_state
 
-    if entity in sensors:
-        for act, model in self.act_model_set.items():
-            if act in actuators:
-                # KI-Entscheidung
-                prediction = model.predict(pd.DataFrame([self.device_states]))
+        # Für Aktoren: Nur konfigurierte und aktivierte Aktoren dürfen schalten
+        if entity in actuators:
+            device_state = self.device_states.get(entity, {"state": "off", "changes": 0, "last_changed": datetime.datetime.min})
+            manual_intervention = False
 
-                # Nur loggen, wenn sich der Zustand tatsächlich ändert
-                if prediction == 1 and self.get_state(act) != "on":
-                    self.log(f"---Turn on {act}")
-                    self.turn_on(act)
-                    self.last_automation_trigger[act] = True
-                elif prediction == 0 and self.get_state(act) != "off":
-                    self.log(f"---Turn off {act}")
-                    self.turn_off(act)
-                    self.last_automation_trigger[act] = True
+            # Prüfen, ob die Statusänderung von der KI ausgelöst wurde
+            ki_triggered = self.manual_override.get(entity, False)
 
-    def add_rules(self, training_time, actuator, new_state, new_rule, all_rules):
-        self.log("Executing: add_rules")
-        t = time.process_time()
+            # Prüfen, ob die Statusänderung durch eine bekannte Automation ausgelöst wurde
+            automation_triggered = self.last_automation_trigger.get(entity, False)
+            if automation_triggered:
+                self.last_automation_trigger[entity] = False  # Automatisierung zurücksetzen
 
-        utc = pytz.UTC
-        last_states = self.last_states
-
-        last_states_tmp = last_states.copy()
-        current_states_tmp = self.get_state()
-        last_states_tmp = {key: last_states_tmp[key] for key in tsh_config.devices}
-        current_states_tmp = {key: current_states_tmp[key] for key in tsh_config.devices}
-        del last_states_tmp[actuator]
-        del current_states_tmp[actuator]
-
-        states_no_change = last_states_tmp == current_states_tmp
-
-        last_update_time = datetime.datetime.strptime(last_states[actuator]["last_updated"], "%Y-%m-%dT%H:%M:%S.%f%z")
-        now_minus_training_time = utc.localize(datetime.datetime.now() - datetime.timedelta(seconds=training_time))
-
-        if states_no_change and last_states[actuator]["state"] != new_state and last_update_time > now_minus_training_time:
-            new_rule["state"] = np.where(new_rule["state"] == "on", 1, 0)
-            new_all_rules = pd.concat([all_rules, new_rule]).drop_duplicates()
-
-            if not new_all_rules.equals(all_rules):
-                self.log(f"---Adding new rule for {actuator}")
-                with sql.connect(self.states_db) as con:
-                    new_rule.to_sql("rules_engine", con=con, if_exists="append")
-            else:
-                self.log(f"---Rule already exists for {actuator}")
-        else:
-            elapsed_time = time.process_time() - t
-            self.log(f"---add_rules {elapsed_time}")
+            # Prüfen auf manuellen Eingriff
+            if not ki_triggered and not automation_triggered and old != new:
+                self.log(f"---Manueller Eingriff erkannt: {entity} wurde manuell geschaltet.")
+                manual_intervention = True
+                self.act_model_set[entity].probability_threshold += 0.15
+                self.act_model_set[entity].probability_threshold = min(self.act_model_set[entity].probability_threshold, 0.85)
             
+            elif ki_triggered:
+                device_state["changes"] += 1
+                if device_state["changes"] > 3:
+                    self.log(f"---Maximale Schaltversuche durch KI für {entity} erreicht. Blockiere KI für 90 Sekunden.")
+                    self.manual_override[entity] = True
+                    self.run_in(self.clear_override, 90, entity=entity)
+                    self.act_model_set[entity].probability_threshold -= 0.09
+                    self.act_model_set[entity].probability_threshold = max(self.act_model_set[entity].probability_threshold, 0.2)
+                    return
+
+            # Update Gerätestatus
+            device_state["state"] = new
+            device_state["last_changed"] = now
+            self.device_states[entity] = device_state
+
+        # KI-Lernen und Schalten für Aktoren
+        if entity in sensors:
+            for act, model in self.act_model_set.items():
+                if act in actuators:
+                    # KI-Entscheidung treffen
+                    prediction = model.predict(pd.DataFrame([self.device_states]))
+
+                    # Schalten nur, wenn der Aktor aktiviert ist
+                    if act in enabled_actuators:
+                        if prediction == 1 and self.get_state(act) != "on":
+                            self.log(f"---Turn on {act}")
+                            self.turn_on(act)
+                            self.last_automation_trigger[act] = True
+                        elif prediction == 0 and self.get_state(act) != "off":
+                            self.log(f"---Turn off {act}")
+                            self.turn_off(act)
+                            self.last_automation_trigger[act] = True
+                    else:
+                        self.log(f"---{act} wird fürs Lernen berücksichtigt, aber nicht geschaltet.", level="DEBUG")
+
     def load_models(self):
         actuators = tsh_config.actuators
         act_model_set = {}

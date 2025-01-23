@@ -49,45 +49,71 @@ class ModelExecutor(hass.Hass):
                 self.log(f"Kein Modell für {act} gefunden. Überspringe.", level="WARNING")
         return act_model_set
 
+    def read_actuators(self):
+        """
+        Liest die Liste der aktivierten Aktoren aus einer Konfigurationsdatei.
+        """
+        enabled_actuators = set()
+        try:
+            with open("/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r") as f:
+                metrics_data = json.load(f)
+            for metric in metrics_data:
+                if metric.get("model_enabled", False):
+                    enabled_actuators.add(metric["actuator"])
+        except Exception as e:
+            self.log(f"Fehler beim Lesen der Aktorenkonfiguration: {e}", level="ERROR")
+        return enabled_actuators
+
     def init_db(self):
         """
         Initialisiert die Datenbank, falls erforderlich.
         """
         db_path = "/thesillyhome_src/appdaemon/apps/tsh.db"
-        with sql.connect(db_path) as con:
-            feature_list = self.get_base_columns()
-            db_rules_engine = pd.DataFrame(columns=feature_list)
-            db_rules_engine.loc[0] = 1
-            db_rules_engine["entity_id"] = "dummy"
-            db_rules_engine["state"] = 1
-            try:
+        try:
+            with sql.connect(db_path) as con:
+                feature_list = self.get_base_columns()
+                db_rules_engine = pd.DataFrame(columns=feature_list)
+                db_rules_engine.loc[0] = 1
+                db_rules_engine["entity_id"] = "dummy"
+                db_rules_engine["state"] = 1
                 db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
-            except Exception as e:
-                self.log(f"Datenbank bereits initialisiert. Fehler: {e}", level="INFO")
+            self.log("Datenbank erfolgreich initialisiert.")
+        except Exception as e:
+            self.log(f"Datenbankinitialisierung fehlgeschlagen: {e}", level="ERROR")
+
+    def get_base_columns(self):
+        """
+        Liest die Basis-Spalten für das Datenmodell aus einer Konfigurationsdatei.
+        """
+        try:
+            base_columns = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").columns
+            return sorted(list(set(base_columns) - set(["entity_id", "state", "duplicate"])))
+        except Exception as e:
+            self.log(f"Fehler beim Laden der Basis-Spalten: {e}", level="ERROR")
+            return []
 
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
-        enabled_actuators = self.read_actuators()  # Aktivierte Aktoren laden
+        enabled_actuators = self.read_actuators()
 
+        # Ignoriere nicht konfigurierte Entitäten
         if entity not in sensors and entity not in actuators:
-            return  # Ignoriere nicht konfigurierte Entitäten
+            return
 
         # Sensoren loggen Statusänderungen
         if entity in sensors and old != new:
             self.log(f"{entity} hat seinen Zustand geändert: {old} -> {new}")
 
+        # Aktorenlogik
         if entity in actuators:
-            # Redundantes Schalten vermeiden
             if old == new:
-                return
+                return  # Redundantes Schalten vermeiden
 
-            # Prüfen, ob der Aktor aktiviert ist
             if entity not in enabled_actuators:
                 self.log(f"{entity} ist deaktiviert. Ignoriere Schaltvorgang.", level="DEBUG")
                 return
 
-            # KI-Vorhersage und Schalten
             model = self.act_model_set.get(entity)
             if not model:
                 self.log(f"Kein Modell für {entity} gefunden.", level="ERROR")

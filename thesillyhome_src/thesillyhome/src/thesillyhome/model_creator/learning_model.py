@@ -98,63 +98,61 @@ def train_all_actuator_models():
             logging.info(f"All cases for {actuator} have the same state. Skipping")
             continue
 
-        """
-        Setting output and feature vector
-        """
-        output_vector = df_act["state"]
+"""
+Setting output and feature vector
+"""
+output_vector = df_act["state"]
 
-        # the actuators feature state should not affect the model and also the duplicate column
-        cur_act_list = []
-        for feature in act_list:
-            if feature.startswith(actuator):
-                cur_act_list.append(feature)
-        feature_list = sorted(list(set(act_list) - set(cur_act_list)))
-        feature_vector = df_act[feature_list]
+# Exclude actuator features and duplicate column
+feature_list = [feature for feature in act_list if not feature.startswith(actuator)]
+feature_vector = df_act[feature_list]
 
-        # Split into random training and test set
-        X = feature_vector
-        y = output_vector
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.95)
+# Split into random training and test set (60% Training, 40% Test)
+X = feature_vector
+y = output_vector
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.4, random_state=42)
 
-        # # Weighting more recent observations more. 3 times if in top 50 percent
-        sample_weight = np.ones(len(X_train))
-        sample_weight[: int(len(sample_weight) * 0.5)] = 0.3
+# Weighting more recent observations: newer data (last 60% of training set) gets slightly higher weight
+sample_weight = np.ones(len(X_train))
+sample_weight[-int(len(sample_weight) * 0.6):] = 1.2  # Moderate weight for last 60%
 
-        # Weighting duplicates less
-        sample_weight = sample_weight * X_train["duplicate"]
-        X_train = X_train.drop(columns="duplicate")
-        X_test = X_test.drop(columns="duplicate")
-        y_train = y_train.drop(columns="duplicate")
-        y_test = y_test.drop(columns="duplicate")
+# Weight duplicates less
+sample_weight = sample_weight * X_train["duplicate"]
 
-        train_all_classifiers(
-            model_types,
-            actuator,
-            X_train,
-            X_test,
-            y_train,
-            y_test,
-            sample_weight,
-            metrics_matrix,
-            feature_list,
-        )
+# Remove "duplicate" column from X_train and X_test
+X_train = X_train.drop(columns="duplicate")
+X_test = X_test.drop(columns="duplicate")
 
-    df_metrics_matrix = pd.DataFrame(metrics_matrix)
-    df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
+# Train all classifiers
+train_all_classifiers(
+    model_types,
+    actuator,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    sample_weight,
+    metrics_matrix,
+    feature_list,
+)
 
-    try:
-        best_metrics_matrix = df_metrics_matrix.fillna(0)
-        best_metrics_matrix = df_metrics_matrix.sort_values(
-            "best_optimizer", ascending=False
-        ).drop_duplicates(subset=["actuator"], keep="first")
-    except:
-        logging.warning("No metrics.")
+# Save metrics matrix
+df_metrics_matrix = pd.DataFrame(metrics_matrix)
+df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
 
-    best_metrics_matrix.to_json(
-        "/thesillyhome_src/frontend/static/data/metrics_matrix.json", orient="records"
-    )
+try:
+    best_metrics_matrix = df_metrics_matrix.fillna(0)
+    best_metrics_matrix = best_metrics_matrix.sort_values(
+        "best_optimizer", ascending=False
+    ).drop_duplicates(subset=["actuator"], keep="first")
+except Exception as e:
+    logging.warning(f"No metrics. Error: {e}")
 
-    logging.info("Completed!")
+best_metrics_matrix.to_json(
+    "/thesillyhome_src/frontend/static/data/metrics_matrix.json", orient="records"
+)
+
+logging.info("Completed!")
 
 
 def train_all_classifiers(

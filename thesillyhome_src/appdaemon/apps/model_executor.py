@@ -103,9 +103,10 @@ class ModelExecutor(hass.Hass):
         actuators = tsh_config.actuators
         now = datetime.datetime.now()
 
-        # Log Änderungen von Sensoren und Aktoren
-        if old != new:
-            self.log(f"{entity} hat seinen Zustand geändert: {old} -> {new}")
+        # Log Änderungen nur, wenn der Sensor oder Aktor in den Listen enthalten ist
+        if entity in sensors or entity in actuators:
+            if old != new:
+                self.log(f"{entity} hat seinen Zustand geändert: {old} -> {new}")
 
         if entity in actuators:
             device_state = self.device_states.get(entity, {"state": "off", "changes": 0, "last_changed": datetime.datetime.min})
@@ -123,8 +124,8 @@ class ModelExecutor(hass.Hass):
             if not ki_triggered and not automation_triggered and old != new:
                 self.log(f"---Manueller Eingriff erkannt: {entity} wurde manuell geschaltet.")
                 manual_intervention = True
-                self.act_model_set[entity].probability_threshold += 0.01
-                self.act_model_set[entity].probability_threshold = min(self.act_model_set[entity].probability_threshold, 1.0)
+                self.act_model_set[entity].probability_threshold += 0.30
+                self.act_model_set[entity].probability_threshold = min(self.act_model_set[entity].probability_threshold, 0.92)
             
             elif ki_triggered:
                 device_state["changes"] += 1
@@ -132,8 +133,8 @@ class ModelExecutor(hass.Hass):
                     self.log(f"---Maximale Schaltversuche durch KI für {entity} erreicht. Blockiere KI für 90 Sekunden.")
                     self.manual_override[entity] = True
                     self.run_in(self.clear_override, 90, entity=entity)
-                    self.act_model_set[entity].probability_threshold -= 0.03
-                    self.act_model_set[entity].probability_threshold = max(self.act_model_set[entity].probability_threshold, 0.5)
+                    self.act_model_set[entity].probability_threshold -= 0.25
+                    self.act_model_set[entity].probability_threshold = max(self.act_model_set[entity].probability_threshold, 0.3)
                     return
 
             # Update Gerätestatus

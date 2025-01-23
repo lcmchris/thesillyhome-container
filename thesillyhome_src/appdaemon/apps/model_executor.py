@@ -97,83 +97,94 @@ class ModelExecutor(hass.Hass):
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
-        float_sensors = tsh_config.float_sensors
-        devices = tsh_config.devices
         now = datetime.datetime.now()
 
-        if entity in devices:
-            self.log(f"\n")
-            self.log(f"<--- {entity} is {new} --->")
+        if entity in actuators:
+            device_state = self.device_states.get(entity, {"state": "off", "changes": 0, "last_changed": datetime.datetime.min})
+            manual_intervention = False
 
-            if entity in actuators:
-                device_state = self.device_states[entity]
+            # Prüfen, ob das neue State-Update von der KI ausgelöst wurde
+            ki_triggered = self.manual_override.get(entity, False)
 
-                if device_state["state"] == "on" and new == "off" and device_state["changes"] >= 4:
-                    self.log(f"---Maximale Ausschaltversuche für {entity} erreicht. Ignoriere.")
-                    return
-                    
-                if device_state["state"] == "off" and new == "on" and device_state["changes"] >= 4:
-                    self.log(f"---Maximale Einschaltversuche für {entity} erreicht. Ignoriere.")
-                    return
-                    
-                if self.manual_override.get(entity, False):
-                    self.log(f"---{entity} ist manuell gesperrt. Automatische Aktion ignoriert.")
-                    return
-
-                if old != new and not self.manual_override.get(entity, False):
+            if not ki_triggered and old != new:
+                # Direkter manueller Eingriff erkannt
+                self.log(f"---Manueller Eingriff erkannt: {entity} wurde manuell geschaltet.")
+                manual_intervention = True
+                # Präzision erhöhen
+                self.act_model_set[entity].probability_threshold += 0.01
+                self.act_model_set[entity].probability_threshold = min(self.act_model_set[entity].probability_threshold, 1.0)
+            
+            elif ki_triggered and old != new:
+                # KI-Schaltung erfolgt, aber manuell gegengeschaltet
+                self.log(f"---KI-Schaltung übersteuert: {entity} wurde manuell zurückgesetzt.")
+                self.manual_override[entity] = True  # KI blockieren
+                self.run_in(self.clear_override, 120, entity=entity)  # 120 Sekunden blockieren
+                # Präzision senken
+                self.act_model_set[entity].probability_threshold -= 0.05
+                self.act_model_set[entity].probability_threshold = max(self.act_model_set[entity].probability_threshold, 0.5)
+                return
+            
+            elif ki_triggered:
+                # Schaltvorgang durch die KI
+                device_state["changes"] += 1
+                if device_state["changes"] > 3:
+                    self.log(f"---Maximale Schaltversuche durch KI für {entity} erreicht. Blockiere KI für 90 Sekunden.")
                     self.manual_override[entity] = True
-                    self.run_in(self.clear_override, 3, entity=entity)
+                    self.run_in(self.clear_override, 90, entity=entity)  # 90 Sekunden blockieren
+                    # Präzision senken
+                    self.act_model_set[entity].probability_threshold -= 0.03
+                    self.act_model_set[entity].probability_threshold = max(self.act_model_set[entity].probability_threshold, 0.5)
+                    return
+            
+            # Update Gerätestatus
+            device_state["state"] = new
+            device_state["last_changed"] = now
+            self.device_states[entity] = device_state
 
-                    device_state["state"] = new
-                    if new != old:
-                        device_state["changes"] += 1
-                        device_state["last_changed"] = datetime.datetime.now()
+        # Rest der Logik bleibt unverändert
+        feature_list = self.get_base_columns()
+        current_state_base = pd.DataFrame(columns=feature_list)
+        current_state_base.loc[0] = 0
 
-                self.device_states[entity] = device_state
+        df_sen_states = copy.deepcopy(current_state_base)
+        for sensor in sensors:
+            true_state = self.get_state(entity_id=sensor)
+            if sensor not in tsh_config.float_sensors:
+                if f"{sensor}_{true_state}" in df_sen_states.columns:
+                    df_sen_states[sensor + "_" + true_state] = 1
+            elif sensor in tsh_config.float_sensors:
+                if (true_state) in df_sen_states.columns:
+                    df_sen_states[sensor] = true_state
 
-            feature_list = self.get_base_columns()
-            current_state_base = pd.DataFrame(columns=feature_list)
-            current_state_base.loc[0] = 0
+        df_sen_states[f"hour_{now.hour}"] = 1
+        df_sen_states[f"weekday_{now.weekday()}"] = 1
+        self.log(f"Time is : hour_{now.hour} & weekday_{now.weekday()}", level="DEBUG")
 
-            df_sen_states = copy.deepcopy(current_state_base)
-            for sensor in sensors:
-                true_state = self.get_state(entity_id=sensor)
-                if sensor not in float_sensors:
-                    if f"{sensor}_{true_state}" in df_sen_states.columns:
-                        df_sen_states[sensor + "_" + true_state] = 1
-                elif sensor in float_sensors:
-                    if (true_state) in df_sen_states.columns:
-                        df_sen_states[sensor] = true_state
+        with sql.connect(self.states_db) as con:
+            all_rules = pd.read_sql(f"SELECT * FROM rules_engine", con=con).drop(columns=["index"])
 
-            df_sen_states[f"hour_{now.hour}"] = 1
-            df_sen_states[f"weekday_{now.weekday()}"] = 1
-            self.log(f"Time is : hour_{now.hour} & weekday_{now.weekday()}", level="DEBUG")
+        enabled_actuators = self.read_actuators()
+        if entity in sensors:
+            for act, model in self.act_model_set.items():
+                if act in enabled_actuators:
+                    self.log(f"Prediction sequence for: {act}")
 
-            with sql.connect(self.states_db) as con:
-                all_rules = pd.read_sql(f"SELECT * FROM rules_engine", con=con).drop(columns=["index"])
+                    df_sen_states_less = df_sen_states[self.get_new_feature_list(feature_list, act)]
+                    prediction = model.predict(df_sen_states_less)
 
-            enabled_actuators = self.read_actuators()
-            if entity in sensors:
-                for act, model in self.act_model_set.items():
-                    if act in enabled_actuators:
-                        self.log(f"Prediction sequence for: {act}")
+                    rule_to_verify = df_sen_states_less.copy()
+                    rule_to_verify = rule_to_verify[self.unverified_features(rule_to_verify.columns.values.tolist())]
+                    rule_to_verify["entity_id"] = act
 
-                        df_sen_states_less = df_sen_states[self.get_new_feature_list(feature_list, act)]
-                        prediction = model.predict(df_sen_states_less)
-
-                        rule_to_verify = df_sen_states_less.copy()
-                        rule_to_verify = rule_to_verify[self.unverified_features(rule_to_verify.columns.values.tolist())]
-                        rule_to_verify["entity_id"] = act
-
-                        if self.verify_rules(act, rule_to_verify, prediction, all_rules):
-                            if (prediction == 1) and (self.get_state(act) != "on") and not self.manual_override.get(act, False):
-                                self.log(f"---Turn on {act}")
-                                self.turn_on(act)
-                            elif (prediction == 0) and (self.get_state(act) != "off") and not self.manual_override.get(act, False):
-                                self.log(f"---Turn off {act}")
-                                self.turn_off(act)
-                            else:
-                                self.log(f"---{act} state has not changed.")
+                    if self.verify_rules(act, rule_to_verify, prediction, all_rules):
+                        if (prediction == 1) and (self.get_state(act) != "on") and not self.manual_override.get(act, False):
+                            self.log(f"---Turn on {act}")
+                            self.turn_on(act)
+                        elif (prediction == 0) and (self.get_state(act) != "off") and not self.manual_override.get(act, False):
+                            self.log(f"---Turn off {act}")
+                            self.turn_off(act)
+                        else:
+                            self.log(f"---{act} state has not changed.")
 
     def add_rules(self, training_time, actuator, new_state, new_rule, all_rules):
         self.log("Executing: add_rules")

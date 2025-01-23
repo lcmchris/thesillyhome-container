@@ -42,11 +42,6 @@ class homedb:
                     f"mysql+pymysql://{self.username}:{self.password}@{self.host}:{self.port}/{self.database}",
                     echo=False,
                 )
-            elif self.db_type == "sqlite":
-                mydb = create_engine(
-                    f"sqlite:////config/{self.database}",
-                    echo=False,
-                )
             else:
                 raise Exception(f"Invalid DB type : {self.db_type}.")
             return mydb
@@ -62,16 +57,26 @@ class homedb:
         logging.info("Executing query")
 
         query = f"SELECT \
-                    states.state_id AS state_id  ,\
-                    states_meta.entity_id AS entity_id  ,\
-                    states.state AS state  ,\
-                    states.last_changed AS last_changed  ,\
-                    states.last_updated AS last_updated  ,\
-                    states.old_state_id AS old_state_id  \
-                from states \
-                JOIN states_meta ON states.metadata_id = states_meta.metadata_id\
-                WHERE states_meta.entity_id in ({str(tsh_config.devices)[1:-1]})\
-                ORDER BY last_updated DESC LIMIT 100000;"
+            states.state_id AS state_id, \
+            states_meta.entity_id AS entity_id, \
+            states.state AS state, \
+            states.last_updated_ts AS last_updated, \
+            states.old_state_id AS old_state_id \
+        FROM states \
+        JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
+        WHERE states_meta.entity_id IN ({str(tsh_config.devices)[1:-1]}) \
+            AND states.state != 'unavailable' \
+            AND states_meta.entity_id IN ( \
+                SELECT states_meta.entity_id \
+                FROM states \
+                JOIN states_meta ON states.metadata_id = states_meta.metadata_id \
+                WHERE states.state != 'unavailable' \
+                AND states.last_updated_ts IS NOT NULL \
+                AND states.old_state_id IS NOT NULL \
+                GROUP BY states_meta.entity_id \
+            ) \
+        ORDER BY states.last_updated_ts DESC LIMIT 100000;"
+
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)
             list_df = [
@@ -80,7 +85,7 @@ class homedb:
                     query,
                     con=con,
                     index_col="state_id",
-                    parse_dates=["last_changed", "last_updated"],
+                    parse_dates=["last_updated"],
                     chunksize=1000,
                 )
             ]

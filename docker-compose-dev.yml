@@ -7,7 +7,8 @@ volumes:
 services:
   thesillyhome:
     container_name: thesillyhome
-    image: lcmchris1/thesillyhome-container:dev
+    image: Lightningpicture/thesillyhome-container:ndev-28
+
     restart: unless-stopped
     volumes:
       - .\thesillyhome_src\appdaemon\apps\:/thesillyhome_src/appdaemon/apps/

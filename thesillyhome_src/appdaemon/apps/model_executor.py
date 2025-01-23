@@ -20,7 +20,7 @@ class ModelExecutor(hass.Hass):
         self.act_model_set = self.load_models()
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
         self.last_states = self.get_state()
-        self.last_event_time = datetime.datetime.now()
+        self.last_event_time = datetime.datetime.now(pytz.UTC)
         self.init_db()
         self.manual_interventions = {}  # {actuator: count}
         self.blocked_actuators = {}  # {actuator: block_end_time}
@@ -67,9 +67,14 @@ class ModelExecutor(hass.Hass):
         Prüft, ob die Änderung des Zustands manuell erfolgt ist.
         """
         last_updated = self.get_state(entity_id=entity, attribute="last_changed")
-        time_diff = datetime.datetime.now() - datetime.datetime.strptime(
+
+        # Sicherstellen, dass datetime kompatibel ist
+        now = datetime.datetime.now(pytz.UTC)  # Offset-aware
+        last_updated = datetime.datetime.strptime(
             last_updated, "%Y-%m-%dT%H:%M:%S.%f%z"
         )
+
+        time_diff = now - last_updated
         # Wenn die letzte Änderung kürzer als ein Schwellenwert war, wird davon ausgegangen, dass es automatisch war.
         return time_diff.total_seconds() > 2  # Schwellenwert in Sekunden
 
@@ -78,7 +83,7 @@ class ModelExecutor(hass.Hass):
         actuators = tsh_config.actuators
         float_sensors = tsh_config.float_sensors
         devices = tsh_config.devices
-        now = datetime.datetime.now()
+        now = datetime.datetime.now(pytz.UTC)
 
         if entity in devices:
             self.log(f"\n")
@@ -95,13 +100,13 @@ class ModelExecutor(hass.Hass):
 
                         # Blockiere das Schalten für 90 Sekunden nach 3 manuellen Eingriffen
                         if self.manual_interventions[entity] >= 3:
-                            self.blocked_actuators[entity] = datetime.datetime.now() + datetime.timedelta(seconds=90)
+                            self.blocked_actuators[entity] = datetime.datetime.now(pytz.UTC) + datetime.timedelta(seconds=90)
                             self.manual_interventions[entity] = 0
                             self.log(f"Schalten für {entity} für 90 Sekunden blockiert.")
 
             # Überprüfe, ob der Aktor blockiert ist
             if entity in self.blocked_actuators:
-                if datetime.datetime.now() < self.blocked_actuators[entity]:
+                if datetime.datetime.now(pytz.UTC) < self.blocked_actuators[entity]:
                     self.log(f"{entity} ist blockiert. Keine Aktion durchgeführt.")
                     return
                 else:
@@ -255,13 +260,13 @@ class ModelExecutor(hass.Hass):
             last_states[actuator]["last_updated"], "%Y-%m-%dT%H:%M:%S.%f%z"
         )
         now_minus_training_time = utc.localize(
-            datetime.datetime.now() - datetime.timedelta(seconds=training_time)
+            datetime.datetime.now(pytz.UTC) - datetime.timedelta(seconds=training_time)
         )
         self.log(
             f"---states_no_change: {states_no_change}, last_state: {last_states[actuator]['state']} new_state: {new_state}"
         )
         self.log(
-            f"---last_update_time: {(utc.localize(datetime.datetime.now()) - last_update_time)}"
+            f"---last_update_time: {(utc.localize(datetime.datetime.now(pytz.UTC)) - last_update_time)}"
         )
 
         if (

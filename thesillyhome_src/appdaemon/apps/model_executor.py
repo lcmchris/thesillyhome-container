@@ -26,9 +26,24 @@ class ModelExecutor(hass.Hass):
             self.blocked_actuators = {}  # {actuator: block_end_time}
             self.last_action_by_ai = {}  # {actuator: True/False}
             self.init_db()
+            self.df_act = self.load_actuator_data()  # Sicherstellen, dass df_act initialisiert wird
             self.log("Initialization complete for ModelExecutor.")
         except Exception as e:
             self.log(f"Error during initialization: {e}", level="ERROR")
+
+    def load_actuator_data(self):
+        """
+        Loads the actuator data from the database or file.
+        """
+        try:
+            # Beispiel: Lade die Daten aus der Datenbank
+            with sql.connect(self.states_db) as con:
+                df_act = pd.read_sql("SELECT * FROM actuators_table", con=con)
+                self.log(f"Loaded actuator data with {len(df_act)} rows.", level="INFO")
+            return df_act
+        except Exception as e:
+            self.log(f"Error loading actuator data: {e}", level="ERROR")
+            return pd.DataFrame()  # Leeres DataFrame als Fallback
 
     def read_actuators(self):
         enabled_actuators = set()
@@ -118,6 +133,10 @@ class ModelExecutor(hass.Hass):
 
     def process_state_change(self, entity, old, new):
         try:
+            if self.df_act.empty:
+                self.log("No actuator data available. Skipping state change processing.", level="ERROR")
+                return
+
             feature_list = self.get_base_columns()
             df_sen_states = pd.DataFrame(columns=feature_list)
             df_sen_states.loc[0] = 0
@@ -157,6 +176,10 @@ class ModelExecutor(hass.Hass):
 
     def update_rules(self, entity, new_state, state_data, prediction):
         try:
+            if self.df_act.empty:
+                self.log("No actuator data available for rule updates.", level="ERROR")
+                return
+
             with sql.connect(self.states_db) as con:
                 rules = pd.read_sql("SELECT * FROM rules_engine", con=con)
 
@@ -170,14 +193,6 @@ class ModelExecutor(hass.Hass):
                 if not rules.equals(new_rule):
                     new_rule.to_sql("rules_engine", con=con, if_exists="append")
                     self.log(f"Rules updated for {entity}. Precision might be affected: {precision_loss:.2%}", level="INFO")
-
-                    # Apply precision loss to adjust model weights dynamically
-                    if entity in self.act_model_set:
-                        model = self.act_model_set[entity]
-                        model_weights = model.coef_ * feedback_weight
-                        model.intercept_ *= feedback_weight
-                        model.coef_ = model_weights
-                        self.log(f"Adjusted model weights for {entity} to account for feedback.", level="INFO")
                 else:
                     self.log(f"No new rules needed for {entity}.", level="INFO")
         except Exception as e:

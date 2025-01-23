@@ -103,6 +103,10 @@ class ModelExecutor(hass.Hass):
         actuators = tsh_config.actuators
         now = datetime.datetime.now()
 
+        # Log Änderungen von Sensoren und Aktoren
+        if old != new:
+            self.log(f"{entity} hat seinen Zustand geändert: {old} -> {new}")
+
         if entity in actuators:
             device_state = self.device_states.get(entity, {"state": "off", "changes": 0, "last_changed": datetime.datetime.min})
             manual_intervention = False
@@ -113,7 +117,6 @@ class ModelExecutor(hass.Hass):
             # Prüfen, ob die Statusänderung durch eine bekannte Automation ausgelöst wurde
             automation_triggered = self.last_automation_trigger.get(entity, False)
             if automation_triggered:
-                self.log(f"---{entity} wurde durch Automation ausgelöst (z. B. Sensor).")
                 self.last_automation_trigger[entity] = False  # Automatisierung zurücksetzen
 
             # Prüfen auf manuellen Eingriff
@@ -142,9 +145,17 @@ class ModelExecutor(hass.Hass):
             for act, model in self.act_model_set.items():
                 if act in actuators:
                     self.log(f"Prediction sequence for: {act}")
-                    
-                    prediction = model.predict(pd.DataFrame([self.device_states]))
+                
+                    # Daten aufbereiten und konsistent machen
+                    prepared_data = self.prepare_data_for_prediction(self.device_states, model.feature_names_in_)
+                    if prepared_data is None:
+                        self.log(f"---Fehler: Vorhersagedaten für {act} konnten nicht vorbereitet werden.")
+                        continue
 
+                    # KI-Entscheidung
+                    prediction = model.predict(prepared_data)
+
+                    # Nur loggen, wenn sich der Zustand tatsächlich ändert
                     if prediction == 1 and self.get_state(act) != "on":
                         self.log(f"---Turn on {act}")
                         self.turn_on(act)
@@ -153,8 +164,28 @@ class ModelExecutor(hass.Hass):
                         self.log(f"---Turn off {act}")
                         self.turn_off(act)
                         self.last_automation_trigger[act] = True
-                    else:
-                        self.log(f"---{act} state has not changed.")
+
+    def prepare_data_for_prediction(self, device_states, feature_names):
+        """
+        Bereitet die Daten für die Vorhersage vor, indem sie in ein konsistentes Format gebracht werden.
+        """
+        try:
+            # Alle Feature-Namen aus dem Modell sicherstellen
+            prepared_data = {feature: 0 for feature in feature_names}
+
+            # Zustände aus `device_states` in Features umwandeln
+            for entity, state_info in device_states.items():
+                if isinstance(state_info, dict) and "state" in state_info:
+                    state = state_info["state"]
+                    feature_key = f"{entity}_{state}"
+                    if feature_key in prepared_data:
+                        prepared_data[feature_key] = 1
+
+            # In DataFrame umwandeln
+            return pd.DataFrame([prepared_data])
+        except Exception as e:
+            self.log(f"Fehler beim Vorbereiten der Vorhersagedaten: {e}", level="ERROR")
+            return None
 
     def add_rules(self, training_time, actuator, new_state, new_rule, all_rules):
         self.log("Executing: add_rules")

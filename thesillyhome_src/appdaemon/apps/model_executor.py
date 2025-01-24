@@ -73,20 +73,15 @@ class ModelExecutor(hass.Hass):
         return feature_list
 
     def is_manual_intervention(self, entity, new_state):
-        """
-        Prüft, ob die Änderung des Zustands manuell erfolgt ist.
-        """
         try:
             last_updated = self.get_state(entity_id=entity, attribute="last_changed")
 
-            # Sicherstellen, dass datetime kompatibel ist
             now = datetime.datetime.now(pytz.UTC)  # Offset-aware
             last_updated = datetime.datetime.strptime(
                 last_updated, "%Y-%m-%dT%H:%M:%S.%f%z"
             )
 
             time_diff = now - last_updated
-            # Wenn die letzte Änderung kürzer als ein Schwellenwert war, wird davon ausgegangen, dass es automatisch war.
             return time_diff.total_seconds() > 2  # Schwellenwert in Sekunden
         except Exception as e:
             self.log(f"Error in is_manual_intervention: {e}", level="ERROR")
@@ -110,20 +105,17 @@ class ModelExecutor(hass.Hass):
 
                 if entity in actuators:
                     if old != new:  # Zustandsänderung
-                        # Überprüfen, ob es sich um einen manuellen Eingriff handelt
                         if self.is_manual_intervention(entity, new):
                             self.manual_interventions[entity] = (
                                 self.manual_interventions.get(entity, 0) + 1
                             )
                             self.log(f"Manuelle Eingriffe für {entity}: {self.manual_interventions[entity]}")
 
-                            # Blockiere das Schalten für 90 Sekunden nach 3 manuellen Eingriffen
                             if self.manual_interventions[entity] >= 3:
                                 self.blocked_actuators[entity] = datetime.datetime.now(pytz.UTC) + datetime.timedelta(seconds=90)
                                 self.manual_interventions[entity] = 0
                                 self.log(f"Schalten für {entity} für 90 Sekunden blockiert.")
 
-                # Überprüfe, ob der Aktor blockiert ist
                 if entity in self.blocked_actuators:
                     if datetime.datetime.now(pytz.UTC) < self.blocked_actuators[entity]:
                         self.log(f"{entity} ist blockiert. Keine Aktion durchgeführt.")
@@ -131,13 +123,10 @@ class ModelExecutor(hass.Hass):
                     else:
                         del self.blocked_actuators[entity]
 
-                # Get feature list from parsed data header, set all columns to 0
                 feature_list = self.get_base_columns()
-
                 current_state_base = pd.DataFrame(columns=feature_list)
                 current_state_base.loc[0] = 0
 
-                # Get current state of all sensors for model input
                 df_sen_states = copy.deepcopy(current_state_base)
                 for sensor in sensors:
                     true_state = self.get_state(entity_id=sensor)
@@ -145,7 +134,7 @@ class ModelExecutor(hass.Hass):
                         if f"{sensor}_{true_state}" in df_sen_states.columns:
                             df_sen_states[sensor + "_" + true_state] = 1
                     elif sensor in float_sensors:
-                        if (true_state) in df_sen_states.columns:
+                        if true_state in df_sen_states.columns:
                             df_sen_states[sensor] = true_state
 
                 last_states = self.last_states
@@ -187,32 +176,16 @@ class ModelExecutor(hass.Hass):
 
                             prediction = model.predict(df_sen_states_less)
 
-                            rule_to_verify = df_sen_states_less.copy()
-                            rule_to_verify = rule_to_verify[
-                                self.unverified_features(
-                                    rule_to_verify.columns.values.tolist()
-                                )
-                            ]
-                            rule_to_verify["entity_id"] = act
+                            if act in self.blocked_actuators and datetime.datetime.now(pytz.UTC) < self.blocked_actuators[act]:
+                                self.log(f"{act} ist blockiert. Keine Aktion durchgeführt.")
+                                continue
 
-                            if self.verify_rules(
-                                act, rule_to_verify, prediction, all_rules
-                            ):
-                                self.log(
-                                    f"---Predicted {act} as {prediction}", level="INFO"
-                                )
-                                if (prediction == 1) and (all_states[act]["state"] != "on"):
-                                    self.log(f"---Turn on {act}")
-                                    self.turn_on(act)
-                                elif (prediction == 0) and (
-                                    all_states[act]["state"] != "off"
-                                ):
-                                    self.log(f"---Turn off {act}")
-                                    self.turn_off(act)
-                                else:
-                                    self.log(f"---{act} state has not changed.")
-                        else:
-                            self.log("Ignore Disabled actuator")
+                            if prediction == 1 and all_states[act]["state"] != "on":
+                                self.log(f"---Turn on {act}")
+                                self.turn_on(act)
+                            elif prediction == 0 and all_states[act]["state"] != "off":
+                                self.log(f"---Turn off {act}")
+                                self.turn_off(act)
 
                 self.last_states = self.get_state()
         except Exception as e:
@@ -286,7 +259,7 @@ class ModelExecutor(hass.Hass):
                 last_states[actuator]["last_updated"], "%Y-%m-%dT%H:%M:%S.%f%z"
             )
             now_minus_training_time = datetime.datetime.now(pytz.UTC) - datetime.timedelta(seconds=training_time)
-            
+
             self.log(
                 f"---states_no_change: {states_no_change}, last_state: {last_states[actuator]['state']} new_state: {new_state}"
             )

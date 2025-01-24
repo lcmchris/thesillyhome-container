@@ -26,6 +26,7 @@ class ModelExecutor(hass.Hass):
         self.automation_block = {}  # Track block status for automation
         self.automation_history = {}  # Track state change history for each actuator
         self.automated_actions = {}  # Track automated actions for each actuator
+        self.manual_intervention_times = {}  # Track manual interventions with timestamps
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
@@ -148,7 +149,6 @@ class ModelExecutor(hass.Hass):
                 self.log(f"---Rule already exists for {actuator}")
         else:
             self.log(f"---Rules not added")
-
     def load_models(self):
         actuators = tsh_config.actuators
         act_model_set = {}
@@ -194,6 +194,18 @@ class ModelExecutor(hass.Hass):
             return True
         return False
 
+    def record_manual_intervention(self, entity):
+        """Record the timestamp of a manual intervention."""
+        self.manual_intervention_times[entity] = time.time()
+        self.log(f"--- Manual intervention recorded for {entity} at {self.manual_intervention_times[entity]}")
+
+    def was_recent_manual_intervention(self, entity, threshold=90):
+        """Check if there was a manual intervention within the last `threshold` seconds."""
+        last_intervention = self.manual_intervention_times.get(entity, 0)
+        if time.time() - last_intervention <= threshold:
+            return True
+        return False
+
     def record_automation_history(self, entity, state):
         """Track state changes for detecting rapid toggling."""
         if entity not in self.automation_history:
@@ -211,7 +223,7 @@ class ModelExecutor(hass.Hass):
             self.block_automation(entity, 900)
 
             # Decrease the score significantly for rapid toggling
-            self.scores[entity] = max(3.0, self.scores[entity] - 0.2)
+            self.scores[entity] = max(0.0, self.scores[entity] - 0.4)
             self.log(f"--- Score for {entity} decreased due to rapid toggling. New score: {self.scores[entity]}")
 
     def state_handler(self, entity, attribute, old, new, kwargs):
@@ -224,32 +236,6 @@ class ModelExecutor(hass.Hass):
         if entity in devices:
             self.log(f"\n")
             self.log(f"<--- {entity} is {new} --->")
-
-            # Check if the state change was automated or manual
-            if entity in actuators:
-                if self.is_automation_blocked(entity):
-                    self.log(f"--- Automation for {entity} is blocked. Ignoring state change.")
-                    return
-
-                if self.automated_actions.get(entity):
-                    self.log(f"--- {entity} state changed automatically.")
-                    self.scores[entity] += 0.07  # Reward for correct automation
-                    del self.automated_actions[entity]  # Clear the automated flag
-                else:
-                    self.log(f"--- {entity} state changed manually.")
-                    self.record_manual_intervention(entity)
-
-                    # Check if manual intervention occurred within 90 seconds
-                    if self.was_recent_manual_intervention(entity):
-                        self.log(f"--- Manual intervention detected within 90 seconds. Decreasing score for {entity}.")
-                        self.scores[entity] = max(0.0, self.scores[entity] - 0.16)
-                        self.block_automation(entity, 900)  # Block automation for 900 seconds
-                    else:
-                        self.log(f"--- Manual intervention occurred after 90 seconds. No penalty applied.")
-
-            # Record state change for rapid toggling detection
-            if entity in actuators:
-                self.record_automation_history(entity, new)
 
             # Get feature list from parsed data header, set all columns to 0
             feature_list = self.get_base_columns()
@@ -273,9 +259,6 @@ class ModelExecutor(hass.Hass):
 
             df_sen_states[f"hour_{now.hour}"] = 1
             df_sen_states[f"weekday_{now.weekday()}"] = 1
-            self.log(
-                f"Time is : hour_{now.hour} & weekday_{now.weekday()}", level="DEBUG"
-            )
 
             with sql.connect(self.states_db) as con:
                 all_rules = pd.read_sql(
@@ -301,7 +284,6 @@ class ModelExecutor(hass.Hass):
                     if act in enabled_actuators:
                         self.log(f"Prediction sequence for: {act}")
 
-                        # Check if automation is blocked
                         if self.is_automation_blocked(act):
                             self.log(f"--- Automation for {act} is blocked. Skipping prediction.")
                             continue
@@ -323,9 +305,7 @@ class ModelExecutor(hass.Hass):
                         if self.verify_rules(
                             act, rule_to_verify, prediction, all_rules
                         ):
-                            self.log(
-                                f"---Predicted {act} as {prediction}", level="INFO"
-                            )
+                            self.log(f"---Predicted {act} as {prediction}")
                             if (prediction == 1) and (all_states[act]["state"] != "on"):
                                 self.log(f"---Turn on {act}")
                                 self.automated_actions[act] = True
@@ -340,5 +320,4 @@ class ModelExecutor(hass.Hass):
                                 self.log(f"---{act} state has not changed.")
                     else:
                         self.log("Ignore Disabled actuator")
-
             self.last_states = self.get_state()

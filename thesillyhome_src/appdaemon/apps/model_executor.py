@@ -26,7 +26,6 @@ class ModelExecutor(hass.Hass):
         self.automation_block = {}  # Track block status for automation
         self.automation_history = {}  # Track state change history for each actuator
         self.automated_actions = {}  # Track automated actions for each actuator
-        self.manual_intervention_times = {}  # Track manual interventions with timestamps
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
@@ -150,69 +149,196 @@ class ModelExecutor(hass.Hass):
         else:
             self.log(f"---Rules not added")
 
+    def load_models(self):
+        actuators = tsh_config.actuators
+        act_model_set = {}
+        for act in actuators:
+            if os.path.isfile(f"{tsh_config.data_dir}/model/{act}/best_model.pkl"):
+                with open(
+                    f"{tsh_config.data_dir}/model/{act}/best_model.pkl",
+                    "rb",
+                ) as pickle_file:
+                    content = pickle.load(pickle_file)
+                    act_model_set[act] = content
+            else:
+                logging.info(f"No model for {act}")
+        return act_model_set
+
+    def get_base_columns(self):
+        base_columns = pd.read_pickle(
+            f"{tsh_config.data_dir}/parsed/act_states.pkl"
+        ).columns
+        base_columns = sorted(
+            list(set(base_columns) - set(["entity_id", "state", "duplicate"]))
+        )
+        return base_columns
+
+    def get_new_feature_list(self, feature_list: list, device: string):
+        cur_list = []
+        for feature in feature_list:
+            if feature.startswith(device):
+                cur_list.append(feature)
+        new_feature_list = sorted(list(set(feature_list) - set(cur_list)))
+        return new_feature_list
+
     def block_automation(self, entity, duration):
+        """Block automation for a given entity for a specified duration (in seconds)."""
         self.automation_block[entity] = time.time() + duration
         self.log(f"Automation for {entity} blocked for {duration} seconds.")
 
     def is_automation_blocked(self, entity):
+        """Check if automation is currently blocked for a given entity."""
         unblock_time = self.automation_block.get(entity, 0)
         if time.time() < unblock_time:
             self.log(f"Automation for {entity} is currently blocked.")
             return True
         return False
 
-    def record_manual_intervention(self, entity):
-        self.manual_intervention_times[entity] = time.time()
-        self.log(f"--- Manual intervention recorded for {entity} at {self.manual_intervention_times[entity]}")
-
-    def was_recent_manual_intervention(self, entity, threshold=90):
-        last_intervention = self.manual_intervention_times.get(entity, 0)
-        return (time.time() - last_intervention) <= threshold
-
     def record_automation_history(self, entity, state):
+        """Track state changes for detecting rapid toggling."""
         if entity not in self.automation_history:
             self.automation_history[entity] = []
         self.automation_history[entity].append((time.time(), state))
+
+        # Keep only the last 10 seconds of history
         self.automation_history[entity] = [
             (t, s) for t, s in self.automation_history[entity] if time.time() - t <= 10
         ]
+
+        # Check if there were 4 rapid toggles
         if len(self.automation_history[entity]) >= 4:
             self.log(f"--- Rapid toggling detected for {entity}. Blocking automation.")
             self.block_automation(entity, 900)
-            self.scores[entity] = max(0.0, self.scores[entity] - 0.4)
 
-    def get_state_features(self, entity):
-        feature_list = self.get_base_columns()
-        current_state_base = pd.DataFrame(columns=feature_list)
-        current_state_base.loc[0] = 0
-
-        for sensor in tsh_config.sensors:
-            state = self.get_state(sensor)
-            if f"{sensor}_{state}" in current_state_base.columns:
-                current_state_base[f"{sensor}_{state}"] = 1
-        return current_state_base
+            # Decrease the score significantly for rapid toggling
+            self.scores[entity] = max(3.0, self.scores[entity] - 0.2)
+            self.log(f"--- Score for {entity} decreased due to rapid toggling. New score: {self.scores[entity]}")
 
     def state_handler(self, entity, attribute, old, new, kwargs):
-        actuators = tsh_config.actuators
-        if entity in actuators:
-            if self.is_automation_blocked(entity):
-                self.log(f"--- Automation for {entity} is blocked. Skipping state change.")
-                return
-            if not self.automated_actions.get(entity):
-                self.record_manual_intervention(entity)
-                if self.was_recent_manual_intervention(entity):
-                    self.block_automation(entity, 900)
-                    self.scores[entity] = max(0.0, self.scores[entity] - 0.16)
-
         sensors = tsh_config.sensors
-        if entity in sensors:
-            for act, model in self.act_model_set.items():
-                if self.is_automation_blocked(act):
-                    continue
-                prediction = model.predict(self.get_state_features(entity))
-                if prediction == 1 and self.get_state(act) != "on":
-                    self.automated_actions[act] = True
-                    self.turn_on(act)
-                elif prediction == 0 and self.get_state(act) != "off":
-                    self.automated_actions[act] = True
-                    self.turn_off(act)
+        actuators = tsh_config.actuators
+        float_sensors = tsh_config.float_sensors
+        devices = tsh_config.devices
+        now = datetime.datetime.now()
+
+        if entity in devices:
+            self.log(f"\n")
+            self.log(f"<--- {entity} is {new} --->")
+
+            # Check if the state change was automated or manual
+            if entity in actuators:
+                if self.is_automation_blocked(entity):
+                    self.log(f"--- Automation for {entity} is blocked. Ignoring state change.")
+                    return
+
+                if self.automated_actions.get(entity):
+                    self.log(f"--- {entity} state changed automatically.")
+                    self.scores[entity] += 0.07  # Reward for correct automation
+                    del self.automated_actions[entity]  # Clear the automated flag
+                else:
+                    self.log(f"--- {entity} state changed manually.")
+                    self.record_manual_intervention(entity)
+
+                    # Check if manual intervention occurred within 90 seconds
+                    if self.was_recent_manual_intervention(entity):
+                        self.log(f"--- Manual intervention detected within 90 seconds. Decreasing score for {entity}.")
+                        self.scores[entity] = max(0.0, self.scores[entity] - 0.16)
+                        self.block_automation(entity, 900)  # Block automation for 900 seconds
+                    else:
+                        self.log(f"--- Manual intervention occurred after 90 seconds. No penalty applied.")
+
+            # Record state change for rapid toggling detection
+            if entity in actuators:
+                self.record_automation_history(entity, new)
+
+            # Get feature list from parsed data header, set all columns to 0
+            feature_list = self.get_base_columns()
+
+            current_state_base = pd.DataFrame(columns=feature_list)
+            current_state_base.loc[0] = 0
+
+            # Get current state of all sensors for model input
+            df_sen_states = copy.deepcopy(current_state_base)
+            for sensor in sensors:
+                true_state = self.get_state(entity_id=sensor)
+                if sensor not in float_sensors:
+                    if f"{sensor}_{true_state}" in df_sen_states.columns:
+                        df_sen_states[sensor + "_" + true_state] = 1
+                elif sensor in float_sensors:
+                    if (true_state) in df_sen_states.columns:
+                        df_sen_states[sensor] = true_state
+
+            last_states = self.last_states
+            all_states = self.get_state()
+
+            df_sen_states[f"hour_{now.hour}"] = 1
+            df_sen_states[f"weekday_{now.weekday()}"] = 1
+            self.log(
+                f"Time is : hour_{now.hour} & weekday_{now.weekday()}", level="DEBUG"
+            )
+
+            with sql.connect(self.states_db) as con:
+                all_rules = pd.read_sql(
+                    f"SELECT * FROM rules_engine",
+                    con=con,
+                )
+                all_rules = all_rules.drop(columns=["index"])
+
+            enabled_actuators = self.read_actuators()
+            if entity in actuators:
+                new_rule = df_sen_states.copy()
+                new_rule = new_rule[self.get_new_feature_list(feature_list, entity)]
+                new_rule = new_rule[
+                    self.unverified_features(new_rule.columns.values.tolist())
+                ]
+                new_rule["entity_id"] = entity
+                new_rule["state"] = new
+                training_time = 10
+                self.add_rules(training_time, entity, new, new_rule, all_rules)
+
+            if entity in sensors:
+                for act, model in self.act_model_set.items():
+                    if act in enabled_actuators:
+                        self.log(f"Prediction sequence for: {act}")
+
+                        # Check if automation is blocked
+                        if self.is_automation_blocked(act):
+                            self.log(f"--- Automation for {act} is blocked. Skipping prediction.")
+                            continue
+
+                        df_sen_states_less = df_sen_states[
+                            self.get_new_feature_list(feature_list, act)
+                        ]
+
+                        prediction = model.predict(df_sen_states_less)
+
+                        rule_to_verify = df_sen_states_less.copy()
+                        rule_to_verify = rule_to_verify[
+                            self.unverified_features(
+                                rule_to_verify.columns.values.tolist()
+                            )
+                        ]
+                        rule_to_verify["entity_id"] = act
+
+                        if self.verify_rules(
+                            act, rule_to_verify, prediction, all_rules
+                        ):
+                            self.log(
+                                f"---Predicted {act} as {prediction}", level="INFO"
+                            )
+                            if (prediction == 1) and (all_states[act]["state"] != "on"):
+                                self.log(f"---Turn on {act}")
+                                self.automated_actions[act] = True
+                                self.turn_on(act)
+                            elif (prediction == 0) and (
+                                all_states[act]["state"] != "off"
+                            ):
+                                self.log(f"---Turn off {act}")
+                                self.automated_actions[act] = True
+                                self.turn_off(act)
+                            else:
+                                self.log(f"---{act} state has not changed.")
+                    else:
+                        self.log("Ignore Disabled actuator")
+
+            self.last_states = self.get_state()

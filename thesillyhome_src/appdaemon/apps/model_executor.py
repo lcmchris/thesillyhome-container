@@ -106,7 +106,7 @@ class ModelExecutor(hass.Hass):
 
     def is_blocked(self, act):
         now = datetime.datetime.now()
-    
+
         # Prüfen auf automatische Blockierung
         if act in self.blocked_actuators:
             unblock_time = self.blocked_actuators[act]
@@ -116,25 +116,14 @@ class ModelExecutor(hass.Hass):
             else:
                 del self.blocked_actuators[act]  # Automatische Blockierung aufheben
 
-    # Prüfen auf manuelle Blockierung
-    if act in self.manual_blocks:
-        unblock_time = self.manual_blocks[act]
-        if now < unblock_time:
-            self.log(f"{act} is manually blocked until {unblock_time}.", level="WARNING")
-            return True
-        else:
-            del self.manual_blocks[act]  # Manuelle Blockierung aufheben
-
-    return False
-
-
+        # Prüfen auf manuelle Blockierung
         if act in self.manual_blocks:
             unblock_time = self.manual_blocks[act]
             if now < unblock_time:
                 self.log(f"{act} is manually blocked until {unblock_time}.", level="WARNING")
                 return True
             else:
-                del self.manual_blocks[act]  # Unblock manual block
+                del self.manual_blocks[act]  # Manuelle Blockierung aufheben
 
         return False
 
@@ -160,7 +149,6 @@ class ModelExecutor(hass.Hass):
         prediction: int,
         all_rules: pd.DataFrame,
     ):
-
         self.log("Executing: verify_rules")
 
         t = time.process_time()
@@ -207,7 +195,6 @@ class ModelExecutor(hass.Hass):
         new_rule: pd.DataFrame,
         all_rules: pd.DataFrame,
     ):
-
         self.log("Executing: add_rules")
         t = time.process_time()
 

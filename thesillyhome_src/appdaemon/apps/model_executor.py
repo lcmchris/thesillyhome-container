@@ -12,14 +12,6 @@ import numpy as np
 import time
 import json
 import threading
-from sklearn.model_selection import train_test_split
-from sklearn.tree import DecisionTreeClassifier, plot_tree
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
-from sklearn.metrics import precision_recall_curve, accuracy_score, precision_score, recall_score, auc
-from sklearn.preprocessing import MinMaxScaler
-import matplotlib.pyplot as plt
 
 class ModelExecutor(hass.Hass):
     def initialize(self):
@@ -102,25 +94,12 @@ class ModelExecutor(hass.Hass):
                 cursor = con.cursor()
                 valid = self.learning_data[actuator].get("valid")
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-                # Check if entry exists
-                cursor.execute("SELECT COUNT(*) FROM learning_feedback WHERE actuator = ?", (actuator,))
-                count = cursor.fetchone()[0]
-
-                if count > 0:
-                    cursor.execute(
-                        "UPDATE learning_feedback SET valid = ?, timestamp = ? WHERE actuator = ?",
-                        (valid, timestamp, actuator)
-                    )
-                    self.log(f"Updated learning data for {actuator} in database.", level="INFO")
-                else:
-                    cursor.execute(
-                        "INSERT INTO learning_feedback (actuator, valid, timestamp) VALUES (?, ?, ?)",
-                        (actuator, valid, timestamp)
-                    )
-                    self.log(f"Inserted new learning data for {actuator} in database.", level="INFO")
-
+                cursor.execute(
+                    "INSERT INTO learning_feedback (actuator, valid, timestamp) VALUES (?, ?, ?)",
+                    (actuator, valid, timestamp)
+                )
                 con.commit()
+                self.log(f"Learning data for {actuator} saved to database.", level="INFO")
         except Exception as e:
             self.log(f"Error saving learning data for {actuator}: {e}", level="ERROR")
 
@@ -131,41 +110,15 @@ class ModelExecutor(hass.Hass):
                 feedback_query = "SELECT * FROM learning_feedback WHERE actuator = ?"
                 feedback_data = pd.read_sql(feedback_query, con, params=(actuator,))
 
-            if feedback_data.empty:
+            # Placeholder: Use feedback_data to retrain the model
+            # For simplicity, we assume binary classification: valid = 1, invalid = 0
+            if not feedback_data.empty:
+                feedback_data["valid"] = feedback_data["valid"].astype(int)
+                # Example: Update model using the feedback data
+                self.act_model_set[actuator].fit(feedback_data[["timestamp"]], feedback_data["valid"])
+                self.log(f"Model for {actuator} updated successfully with feedback.", level="INFO")
+            else:
                 self.log(f"No feedback data available for actuator: {actuator}", level="WARNING")
-                return
-
-            feedback_data["valid"] = feedback_data["valid"].astype(int)
-
-            # Load additional data for training
-            df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")
-            df_act = df_act_states[df_act_states["entity_id"] == actuator]
-
-            if df_act.empty:
-                self.log(f"No training data available for actuator: {actuator}", level="WARNING")
-                return
-
-            # Prepare training data
-            output_vector = df_act["state"]
-            feature_list = [col for col in df_act.columns if col not in ["state", "entity_id"]]
-            feature_vector = df_act[feature_list]
-
-            X = feature_vector
-            y = output_vector
-
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-
-            model = RandomForestClassifier()
-            model.fit(X_train, y_train)
-
-            self.act_model_set[actuator] = model
-
-            # Save the retrained model
-            model_path = f"{tsh_config.data_dir}/model/{actuator}/best_model.pkl"
-            with open(model_path, "wb") as model_file:
-                pickle.dump(model, model_file)
-
-            self.log(f"Model for {actuator} retrained and saved successfully.", level="INFO")
 
         except Exception as e:
             self.log(f"Error retraining model for {actuator}: {e}", level="ERROR")

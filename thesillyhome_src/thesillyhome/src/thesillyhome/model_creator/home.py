@@ -75,7 +75,7 @@ class homedb:
                 AND states.old_state_id IS NOT NULL \
                 GROUP BY states_meta.entity_id \
             ) \
-        ORDER BY states.last_updated_ts DESC LIMIT 500000;"
+        ORDER BY states.last_updated_ts DESC LIMIT 2500000;"
 
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)

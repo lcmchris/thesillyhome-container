@@ -111,11 +111,11 @@ class ModelExecutor(hass.Hass):
             self.switch_logs[act] = deque(maxlen=10)  # Keep the last 10 switches
         self.switch_logs[act].append(now)
 
-        # Check if the actuator has switched more than 4 times in the last 10 seconds
-        recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 10]
-        if len(recent_switches) > 4:
-            self.blocked_actuators[act] = now + datetime.timedelta(seconds=90)
-            self.log(f"{act} has been blocked for 90 seconds due to excessive switching.", level="ERROR")
+        # Check if the actuator has switched more than 4 times in the last 30 seconds
+        recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 30]
+        if len(recent_switches) > 6:
+            self.blocked_actuators[act] = now + datetime.timedelta(seconds=900)
+            self.log(f"{act} has been blocked for 900 seconds due to excessive switching.", level="ERROR")
 
     def verify_rules(
         self,
@@ -325,7 +325,7 @@ class ModelExecutor(hass.Hass):
                 ]
                 new_rule["entity_id"] = entity
                 new_rule["state"] = new
-                training_time = 10
+                training_time = 20
                 self.add_rules(training_time, entity, new, new_rule, all_rules)
 
             if entity in sensors:

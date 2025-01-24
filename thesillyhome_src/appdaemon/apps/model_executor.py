@@ -23,6 +23,7 @@ class ModelExecutor(hass.Hass):
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
         self.last_states = self.get_state()
         self.last_event_time = datetime.datetime.now()
+        self.automation_triggered = set()  # Track which entities were triggered by automation
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
@@ -318,6 +319,7 @@ class ModelExecutor(hass.Hass):
                             if (prediction == 1) and (all_states[act]["state"] != "on"):
                                 self.log(f"---Turn on {act}")
                                 self.turn_on(act)
+                                self.automation_triggered.add(act)  # Mark as triggered by automation
                                 self.log_automatic_action(act, "eingeschaltet")
 
                             elif (prediction == 0) and (
@@ -325,6 +327,7 @@ class ModelExecutor(hass.Hass):
                             ):
                                 self.log(f"---Turn off {act}")
                                 self.turn_off(act)
+                                self.automation_triggered.add(act)  # Mark as triggered by automation
                                 self.log_automatic_action(act, "ausgeschaltet")
 
                             else:
@@ -337,7 +340,9 @@ class ModelExecutor(hass.Hass):
                 current_state = all_states[act]["state"]
 
                 if act not in self.last_states or self.last_states[act]["state"] != current_state:
-                    if "turn_on" not in str(self.last_event_time):
+                    if act in self.automation_triggered:
+                        self.automation_triggered.remove(act)  # Clear automation mark
+                    else:
                         self.log_manual_action(act, current_state)
 
             self.last_states = self.get_state()

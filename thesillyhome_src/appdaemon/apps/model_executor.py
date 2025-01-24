@@ -116,13 +116,6 @@ class ModelExecutor(hass.Hass):
                                 self.manual_interventions[entity] = 0
                                 self.log(f"Schalten für {entity} für 90 Sekunden blockiert.")
 
-                if entity in self.blocked_actuators:
-                    if datetime.datetime.now(pytz.UTC) < self.blocked_actuators[entity]:
-                        self.log(f"{entity} ist blockiert. Keine Aktion durchgeführt.")
-                        return
-                    else:
-                        del self.blocked_actuators[entity]
-
                 feature_list = self.get_base_columns()
                 current_state_base = pd.DataFrame(columns=feature_list)
                 current_state_base.loc[0] = 0
@@ -137,7 +130,6 @@ class ModelExecutor(hass.Hass):
                         if true_state in df_sen_states.columns:
                             df_sen_states[sensor] = true_state
 
-                last_states = self.last_states
                 all_states = self.get_state()
 
                 df_sen_states[f"hour_{now.hour}"] = 1
@@ -154,17 +146,6 @@ class ModelExecutor(hass.Hass):
                     all_rules = all_rules.drop(columns=["index"])
 
                 enabled_actuators = self.read_actuators()
-                if entity in actuators:
-                    new_rule = df_sen_states.copy()
-                    new_rule = new_rule[self.get_new_feature_list(feature_list, entity)]
-                    new_rule = new_rule[
-                        self.unverified_features(new_rule.columns.values.tolist())
-                    ]
-                    new_rule["entity_id"] = entity
-                    new_rule["state"] = new
-                    training_time = 10
-                    self.add_rules(training_time, entity, new, new_rule, all_rules)
-
                 if entity in sensors:
                     for act, model in self.act_model_set.items():
                         if act in enabled_actuators:
@@ -176,20 +157,46 @@ class ModelExecutor(hass.Hass):
 
                             prediction = model.predict(df_sen_states_less)
 
-                            if act in self.blocked_actuators and datetime.datetime.now(pytz.UTC) < self.blocked_actuators[act]:
-                                self.log(f"{act} ist blockiert. Keine Aktion durchgeführt.")
-                                continue
-
                             if prediction == 1 and all_states[act]["state"] != "on":
-                                self.log(f"---Turn on {act}")
+                                self.log(f"--- Automatically turning on {act}")
                                 self.turn_on(act)
+                                self.log(f"--- Automatic action recorded for {act}")
+                                self.record_automatic_action(act, "on")
+
                             elif prediction == 0 and all_states[act]["state"] != "off":
-                                self.log(f"---Turn off {act}")
+                                self.log(f"--- Automatically turning off {act}")
                                 self.turn_off(act)
+                                self.log(f"--- Automatic action recorded for {act}")
+                                self.record_automatic_action(act, "off")
 
                 self.last_states = self.get_state()
         except Exception as e:
             self.log(f"Error in state_handler: {e}", level="ERROR")
+
+    def record_automatic_action(self, actuator, state):
+        """
+        Records an automatic action for further evaluation, including
+        determining if the actuator should be blocked due to excessive toggling.
+        """
+        try:
+            now = datetime.datetime.now(pytz.UTC)
+            if actuator not in self.blocked_actuators:
+                self.blocked_actuators[actuator] = []
+
+            self.blocked_actuators[actuator].append(now)
+
+            # Clean up old actions (keep only last 10 seconds)
+            self.blocked_actuators[actuator] = [
+                action_time
+                for action_time in self.blocked_actuators[actuator]
+                if (now - action_time).total_seconds() <= 10
+            ]
+
+            if len(self.blocked_actuators[actuator]) > 10:
+                self.log(f"--- Blocking {actuator} due to excessive toggling.")
+                self.blocked_actuators[actuator] = datetime.datetime.now(pytz.UTC) + datetime.timedelta(seconds=90)
+        except Exception as e:
+            self.log(f"Error in record_automatic_action: {e}", level="ERROR")
 
     def verify_rules(self, act, rules_to_verify, prediction, all_rules):
         try:
@@ -282,10 +289,6 @@ class ModelExecutor(hass.Hass):
                         new_rule.to_sql("rules_engine", con=con, if_exists="append")
                 else:
                     self.log(f"---Rule already exists for {actuator}")
-            else:
-                elapsed_time = time.process_time() - t
-                self.log(f"---add_rules {elapsed_time}")
-                self.log(f"---Rules not added")
         except Exception as e:
             self.log(f"Error in add_rules: {e}", level="ERROR")
 

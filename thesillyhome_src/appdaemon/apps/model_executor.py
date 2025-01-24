@@ -11,9 +11,15 @@ import pytz
 import numpy as np
 import time
 import json
-
-# Local application imports
-import thesillyhome.model_creator.read_config_json as tsh_config
+import threading
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier, plot_tree
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from sklearn.metrics import precision_recall_curve, accuracy_score, precision_score, recall_score, auc
+from sklearn.preprocessing import MinMaxScaler
+import matplotlib.pyplot as plt
 
 class ModelExecutor(hass.Hass):
     def initialize(self):
@@ -22,197 +28,162 @@ class ModelExecutor(hass.Hass):
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
         self.last_states = self.get_state()
         self.last_event_time = datetime.datetime.now()
-        self.scores = {act: 0.5 for act in tsh_config.actuators}
-        self.automation_block = {}  # Track block status for automation
-        self.automation_history = {}  # Track state change history for each actuator
-        self.automated_actions = {}  # Track automated actions for each actuator
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
 
-    def read_actuators(self):
-        enabled_actuators = set()
-        with open(
-            "/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r"
-        ) as f:
-            metrics_data = json.load(f)
-        for metric in metrics_data:
-            if metric["model_enabled"]:
-                enabled_actuators.add(metric["actuator"])
-        self.log(f"Enabled Actuators: {enabled_actuators}")
-        return enabled_actuators
+        # Track automatic actions, toggling prevention, and learning
+        self.auto_executed = {}  # Tracks if the actuator was controlled automatically
+        self.manual_intervention = {}  # Tracks manual intervention
+        self.toggle_prevention = {}  # Tracks prevention period for toggling actuators
+        self.learning_data = {}  # Tracks correctness of actions for learning
 
-    def init_db(self):
-        with sql.connect(self.states_db) as con:
-            feature_list = self.get_base_columns()
-            feature_list = self.unverified_features(feature_list)
-            db_rules_engine = pd.DataFrame(columns=feature_list)
-            db_rules_engine.loc[0] = 1
-            db_rules_engine["entity_id"] = "dummy"
-            db_rules_engine["state"] = 1
+    def prevent_toggle(self, actuator):
+        self.toggle_prevention[actuator] = True
+        time.sleep(300)  # Prevent toggling for 5 minutes
+        self.toggle_prevention[actuator] = False
 
-            self.log(f"Initialized rules engine DB", level="INFO")
-            try:
-                db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
-            except:
-                self.log(f"DB already exists. Skipping", level="INFO")
+    def handle_toggle_prevention(self, actuator):
+        if actuator not in self.toggle_prevention:
+            self.toggle_prevention[actuator] = False
 
-    def unverified_features(self, feature_list):
-        feature_list = self.get_new_feature_list(feature_list, "hour_")
-        feature_list = self.get_new_feature_list(feature_list, "last_state_")
-        feature_list = self.get_new_feature_list(feature_list, "weekday_")
-        feature_list = self.get_new_feature_list(feature_list, "switch")
-        return feature_list
+    def is_toggling_prevented(self, actuator):
+        return self.toggle_prevention.get(actuator, False)
 
-    def verify_rules(
-        self,
-        act: string,
-        rules_to_verify: pd.DataFrame,
-        prediction: int,
-        all_rules: pd.DataFrame,
-    ):
-        t = time.process_time()
-        all_rules = all_rules[all_rules["entity_id"] == act]
-        if not all_rules.empty:
-            matching_rule = all_rules.merge(rules_to_verify)
-            assert len(matching_rule) in [0, 1, 2], "More than 2 matching rules."
-            rules_state = matching_rule["state"].values
+    def mark_manual_action(self, actuator):
+        self.manual_intervention[actuator] = datetime.datetime.now()
+        if actuator in self.auto_executed and self.auto_executed[actuator]:
+            self.auto_executed[actuator] = False
+            self.log(f"Manual action detected for actuator: {actuator}")
 
-            if len(matching_rule) == 2:
-                self.log(f"--- These set of features are ambiguous. Do nothing.")
-                return False
-
-            elif (len(matching_rule) == 1) and (rules_state != prediction):
-                self.log(
-                    f"--- This will not be executed as it is part of the excluded rules."
-                )
-                return False
-
-            else:
-                self.log("--- No matching rules")
-                return True
-        else:
-            self.log(f"--- No matching rules, empty DB for {act}")
-            return True
-
-    def add_rules(
-        self,
-        training_time: datetime.datetime,
-        actuator: string,
-        new_state: int,
-        new_rule: pd.DataFrame,
-        all_rules: pd.DataFrame,
-    ):
-        t = time.process_time()
-
-        utc = pytz.UTC
-        last_states = self.last_states
-
-        last_states_tmp = last_states.copy()
-        current_states_tmp = self.get_state()
-        last_states_tmp = {
-            your_key: last_states_tmp[your_key] for your_key in tsh_config.devices
+    def mark_automatic_action(self, actuator):
+        self.auto_executed[actuator] = True
+        self.learning_data[actuator] = {
+            "start_time": datetime.datetime.now(),
+            "valid": None
         }
-        current_states_tmp = {
-            your_key: current_states_tmp[your_key] for your_key in tsh_config.devices
-        }
-        del last_states_tmp[actuator]
-        del current_states_tmp[actuator]
+        self.log(f"Automatic action performed on actuator: {actuator}")
 
-        states_no_change = last_states_tmp == current_states_tmp
+    def evaluate_action(self, actuator):
+        if actuator in self.learning_data:
+            start_time = self.learning_data[actuator]["start_time"]
+            now = datetime.datetime.now()
+            time_diff = (now - start_time).total_seconds()
 
-        last_update_time = datetime.datetime.strptime(
-            last_states[actuator]["last_updated"], "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
-        now_minus_training_time = utc.localize(
-            datetime.datetime.now() - datetime.timedelta(seconds=training_time)
-        )
-        self.log(
-            f"---states_no_change: {states_no_change}, last_state: {last_states[actuator]['state']} new_state: {new_state}"
-        )
+            if actuator in self.manual_intervention:
+                manual_time = self.manual_intervention[actuator]
+                manual_diff = (manual_time - start_time).total_seconds()
+                
+                if manual_diff <= 10 and manual_time >= start_time:
+                    self.learning_data[actuator]["valid"] = False
+                    self.log(f"Learning: Automatic action for {actuator} was incorrect (manual intervention within 10 seconds).", level="WARNING")
+                    threading.Thread(target=self.prevent_toggle, args=(actuator,)).start()
 
-        if (
-            states_no_change
-            and last_states[actuator]["state"] != new_state
-            and last_update_time > now_minus_training_time
-        ):
-            new_rule["state"] = np.where(new_rule["state"] == "on", 1, 0)
-            new_all_rules = pd.concat([all_rules, new_rule]).drop_duplicates()
+                elif manual_diff <= 45 and manual_time >= start_time:
+                    self.learning_data[actuator]["valid"] = False
+                    self.log(f"Learning: Automatic action for {actuator} was incorrect (manual intervention within 45 seconds).", level="WARNING")
 
-            if not new_all_rules.equals(all_rules):
-                self.log(f"---Adding new rule for {actuator}")
-
-                with sql.connect(self.states_db) as con:
-                    new_rule.to_sql("rules_engine", con=con, if_exists="append")
+                elif manual_diff > 45:
+                    self.learning_data[actuator]["valid"] = True
+                    self.log(f"Learning: Automatic action for {actuator} was correct (manual intervention after 45 seconds).", level="INFO")
             else:
-                self.log(f"---Rule already exists for {actuator}")
-        else:
-            self.log(f"---Rules not added")
+                if time_diff > 45:
+                    self.learning_data[actuator]["valid"] = True
+                    self.log(f"Learning: Automatic action for {actuator} was correct (no manual intervention within 45 seconds).", level="INFO")
 
-    def load_models(self):
-        actuators = tsh_config.actuators
-        act_model_set = {}
-        for act in actuators:
-            if os.path.isfile(f"{tsh_config.data_dir}/model/{act}/best_model.pkl"):
-                with open(
-                    f"{tsh_config.data_dir}/model/{act}/best_model.pkl",
-                    "rb",
-                ) as pickle_file:
-                    content = pickle.load(pickle_file)
-                    act_model_set[act] = content
-            else:
-                logging.info(f"No model for {act}")
-        return act_model_set
+            # Save learning result to database
+            self.save_learning_to_db(actuator)
+            # Retrain model using feedback
+            self.retrain_model(actuator)
 
-    def get_base_columns(self):
-        base_columns = pd.read_pickle(
-            f"{tsh_config.data_dir}/parsed/act_states.pkl"
-        ).columns
-        base_columns = sorted(
-            list(set(base_columns) - set(["entity_id", "state", "duplicate"]))
-        )
-        return base_columns
+    def save_learning_to_db(self, actuator):
+        try:
+            with sql.connect(self.states_db) as con:
+                cursor = con.cursor()
+                valid = self.learning_data[actuator].get("valid")
+                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    def get_new_feature_list(self, feature_list: list, device: string):
-        cur_list = []
-        for feature in feature_list:
-            if feature.startswith(device):
-                cur_list.append(feature)
-        new_feature_list = sorted(list(set(feature_list) - set(cur_list)))
-        return new_feature_list
+                # Check if entry exists
+                cursor.execute("SELECT COUNT(*) FROM learning_feedback WHERE actuator = ?", (actuator,))
+                count = cursor.fetchone()[0]
 
-    def block_automation(self, entity, duration):
-        """Block automation for a given entity for a specified duration (in seconds)."""
-        self.automation_block[entity] = time.time() + duration
-        self.log(f"Automation for {entity} blocked for {duration} seconds.")
+                if count > 0:
+                    cursor.execute(
+                        "UPDATE learning_feedback SET valid = ?, timestamp = ? WHERE actuator = ?",
+                        (valid, timestamp, actuator)
+                    )
+                    self.log(f"Updated learning data for {actuator} in database.", level="INFO")
+                else:
+                    cursor.execute(
+                        "INSERT INTO learning_feedback (actuator, valid, timestamp) VALUES (?, ?, ?)",
+                        (actuator, valid, timestamp)
+                    )
+                    self.log(f"Inserted new learning data for {actuator} in database.", level="INFO")
 
-    def is_automation_blocked(self, entity):
-        """Check if automation is currently blocked for a given entity."""
-        unblock_time = self.automation_block.get(entity, 0)
-        if time.time() < unblock_time:
-            self.log(f"Automation for {entity} is currently blocked.")
-            return True
-        return False
+                con.commit()
+        except Exception as e:
+            self.log(f"Error saving learning data for {actuator}: {e}", level="ERROR")
 
-    def record_automation_history(self, entity, state):
-        """Track state changes for detecting rapid toggling."""
-        if entity not in self.automation_history:
-            self.automation_history[entity] = []
-        self.automation_history[entity].append((time.time(), state))
+    def retrain_model(self, actuator):
+        try:
+            self.log(f"Retraining model for actuator: {actuator}", level="INFO")
+            with sql.connect(self.states_db) as con:
+                feedback_query = "SELECT * FROM learning_feedback WHERE actuator = ?"
+                feedback_data = pd.read_sql(feedback_query, con, params=(actuator,))
 
-        # Keep only the last 10 seconds of history
-        self.automation_history[entity] = [
-            (t, s) for t, s in self.automation_history[entity] if time.time() - t <= 10
-        ]
+            if feedback_data.empty:
+                self.log(f"No feedback data available for actuator: {actuator}", level="WARNING")
+                return
 
-        # Check if there were 4 rapid toggles
-        if len(self.automation_history[entity]) >= 4:
-            self.log(f"--- Rapid toggling detected for {entity}. Blocking automation.")
-            self.block_automation(entity, 900)
+            feedback_data["valid"] = feedback_data["valid"].astype(int)
 
-            # Decrease the score significantly for rapid toggling
-            self.scores[entity] = max(3.0, self.scores[entity] - 0.2)
-            self.log(f"--- Score for {entity} decreased due to rapid toggling. New score: {self.scores[entity]}")
+            # Load additional data for training
+            df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")
+            df_act = df_act_states[df_act_states["entity_id"] == actuator]
+
+            if df_act.empty:
+                self.log(f"No training data available for actuator: {actuator}", level="WARNING")
+                return
+
+            # Prepare training data
+            output_vector = df_act["state"]
+            feature_list = [col for col in df_act.columns if col not in ["state", "entity_id"]]
+            feature_vector = df_act[feature_list]
+
+            X = feature_vector
+            y = output_vector
+
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
+
+            model = RandomForestClassifier()
+            model.fit(X_train, y_train)
+
+            self.act_model_set[actuator] = model
+
+            # Save the retrained model
+            model_path = f"{tsh_config.data_dir}/model/{actuator}/best_model.pkl"
+            with open(model_path, "wb") as model_file:
+                pickle.dump(model, model_file)
+
+            self.log(f"Model for {actuator} retrained and saved successfully.", level="INFO")
+
+        except Exception as e:
+            self.log(f"Error retraining model for {actuator}: {e}", level="ERROR")
+
+    def execute_action(self, actuator, action):
+        if self.is_toggling_prevented(actuator):
+            self.log(f"Action on {actuator} prevented due to toggle prevention.", level="INFO")
+            return
+
+        if action == "on":
+            self.turn_on(actuator)
+            self.mark_automatic_action(actuator)
+        elif action == "off":
+            self.turn_off(actuator)
+            self.mark_automatic_action(actuator)
+
+        # Start evaluation after 45 seconds
+        threading.Timer(45, self.evaluate_action, args=(actuator,)).start()
 
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
@@ -224,32 +195,6 @@ class ModelExecutor(hass.Hass):
         if entity in devices:
             self.log(f"\n")
             self.log(f"<--- {entity} is {new} --->")
-
-            # Check if the state change was automated or manual
-            if entity in actuators:
-                if self.is_automation_blocked(entity):
-                    self.log(f"--- Automation for {entity} is blocked. Ignoring state change.")
-                    return
-
-                if self.automated_actions.get(entity):
-                    self.log(f"--- {entity} state changed automatically.")
-                    self.scores[entity] += 0.07  # Reward for correct automation
-                    del self.automated_actions[entity]  # Clear the automated flag
-                else:
-                    self.log(f"--- {entity} state changed manually.")
-                    self.record_manual_intervention(entity)
-
-                    # Check if manual intervention occurred within 90 seconds
-                    if self.was_recent_manual_intervention(entity):
-                        self.log(f"--- Manual intervention detected within 90 seconds. Decreasing score for {entity}.")
-                        self.scores[entity] = max(0.0, self.scores[entity] - 0.16)
-                        self.block_automation(entity, 900)  # Block automation for 900 seconds
-                    else:
-                        self.log(f"--- Manual intervention occurred after 90 seconds. No penalty applied.")
-
-            # Record state change for rapid toggling detection
-            if entity in actuators:
-                self.record_automation_history(entity, new)
 
             # Get feature list from parsed data header, set all columns to 0
             feature_list = self.get_base_columns()
@@ -271,12 +216,15 @@ class ModelExecutor(hass.Hass):
             last_states = self.last_states
             all_states = self.get_state()
 
+            # Extract current date
+            # datetime object containing current date and time
             df_sen_states[f"hour_{now.hour}"] = 1
             df_sen_states[f"weekday_{now.weekday()}"] = 1
             self.log(
                 f"Time is : hour_{now.hour} & weekday_{now.weekday()}", level="DEBUG"
             )
 
+            # Check rules for actuators against rules engine
             with sql.connect(self.states_db) as con:
                 all_rules = pd.read_sql(
                     f"SELECT * FROM rules_engine",
@@ -286,6 +234,7 @@ class ModelExecutor(hass.Hass):
 
             enabled_actuators = self.read_actuators()
             if entity in actuators:
+                # Adding rules
                 new_rule = df_sen_states.copy()
                 new_rule = new_rule[self.get_new_feature_list(feature_list, entity)]
                 new_rule = new_rule[
@@ -296,15 +245,11 @@ class ModelExecutor(hass.Hass):
                 training_time = 10
                 self.add_rules(training_time, entity, new, new_rule, all_rules)
 
+            # Execute all models for sensor and set states
             if entity in sensors:
                 for act, model in self.act_model_set.items():
                     if act in enabled_actuators:
                         self.log(f"Prediction sequence for: {act}")
-
-                        # Check if automation is blocked
-                        if self.is_automation_blocked(act):
-                            self.log(f"--- Automation for {act} is blocked. Skipping prediction.")
-                            continue
 
                         df_sen_states_less = df_sen_states[
                             self.get_new_feature_list(feature_list, act)
@@ -323,21 +268,18 @@ class ModelExecutor(hass.Hass):
                         if self.verify_rules(
                             act, rule_to_verify, prediction, all_rules
                         ):
-                            self.log(
-                                f"---Predicted {act} as {prediction}", level="INFO"
-                            )
+                            # Execute actions
                             if (prediction == 1) and (all_states[act]["state"] != "on"):
-                                self.log(f"---Turn on {act}")
-                                self.automated_actions[act] = True
-                                self.turn_on(act)
-                            elif (prediction == 0) and (
-                                all_states[act]["state"] != "off"
-                            ):
-                                self.log(f"---Turn off {act}")
-                                self.automated_actions[act] = True
-                                self.turn_off(act)
-                            else:
-                                self.log(f"---{act} state has not changed.")
+                                if not self.is_toggling_prevented(act):
+                                    self.log(f"---Turn on {act}")
+                                    self.execute_action(act, "on")
+                            elif (prediction == 0) and (all_states[act]["state"] != "off"):
+                                if not self.is_toggling_prevented(act):
+                                    self.log(f"---Turn off {act}")
+                                    self.execute_action(act, "off")
+
+                            self.mark_manual_action(act)  # Mark manual if actuator state changes unexpectedly
+
                     else:
                         self.log("Ignore Disabled actuator")
 

@@ -98,7 +98,7 @@ class ModelExecutor(hass.Hass):
         with sql.connect(self.states_db) as con:
             all_rules = pd.read_sql(f"SELECT * FROM rules_engine WHERE entity_id='{act}'", con=con)
             if not all_rules.empty:
-                all_rules["importance"] = all_rules.get("importance", 1) * 0.07
+                all_rules["importance"] = all_rules.get("importance", 1) * 1.07
                 all_rules.to_sql("rules_engine", con=con, if_exists="replace", index=False)
                 self.log(f"Regelgewicht für {act} um 7% erhöht.", level="INFO")
 
@@ -117,7 +117,7 @@ class ModelExecutor(hass.Hass):
                 del self.blocked_actuators[act]  # Unblock the actuator
 
         if act in self.manual_blocks:
-            unblock_time = self.blocked_actuators[act]
+            unblock_time = self.manual_blocks[act]
             if now < unblock_time:
                 self.log(f"{act} is manually blocked until {unblock_time}.", level="WARNING")
                 return True
@@ -350,7 +350,7 @@ class ModelExecutor(hass.Hass):
                 ]
                 new_rule["entity_id"] = entity
                 new_rule["state"] = new
-                training_time = 20
+                training_time = 10
                 self.add_rules(training_time, entity, new, new_rule, all_rules)
 
             if entity in sensors:

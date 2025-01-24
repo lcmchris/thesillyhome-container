@@ -1,4 +1,3 @@
-# Library imports
 import string
 import appdaemon.plugins.hass.hassapi as hass
 import pickle
@@ -14,7 +13,6 @@ import time
 import json
 from collections import deque
 
-# Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 class ModelExecutor(hass.Hass):
@@ -27,6 +25,7 @@ class ModelExecutor(hass.Hass):
         self.automation_triggered = set()  # Track which entities were triggered by automation
         self.switch_logs = {}  # Track recent switch times for each actuator
         self.blocked_actuators = {}  # Track blocked actuators with unblocking times
+        self.manual_blocks = {}  # Track manual blocks
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
@@ -44,9 +43,6 @@ class ModelExecutor(hass.Hass):
         return enabled_actuators
 
     def init_db(self):
-        """
-        Initialize db with all potential hot encoded features.
-        """
         with sql.connect(self.states_db) as con:
             feature_list = self.get_base_columns()
             feature_list = self.unverified_features(feature_list)
@@ -85,21 +81,41 @@ class ModelExecutor(hass.Hass):
 
     def log_manual_action(self, act, state):
         """
-        Logs an action that was triggered manually.
+        Logs an action that was triggered manually and adjusts blocking and rule importance.
         """
         self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
 
+        # Block automation for 90 seconds after manual intervention
+        self.manual_blocks[act] = datetime.datetime.now() + datetime.timedelta(seconds=90)
+        self.log(f"Automatisierung für {act} für 90 Sekunden blockiert.", level="WARNING")
+
+        # Adjust rule weight
+        with sql.connect(self.states_db) as con:
+            all_rules = pd.read_sql(f"SELECT * FROM rules_engine WHERE entity_id='{act}'", con=con)
+            if not all_rules.empty:
+                all_rules["importance"] = all_rules.get("importance", 1) * 1.07
+                all_rules.to_sql("rules_engine", con=con, if_exists="replace", index=False)
+                self.log(f"Regelgewicht für {act} um 7% erhöht.", level="INFO")
+
     def is_blocked(self, act):
-        """
-        Check if an actuator is currently blocked.
-        """
+        now = datetime.datetime.now()
+
         if act in self.blocked_actuators:
             unblock_time = self.blocked_actuators[act]
-            if datetime.datetime.now() < unblock_time:
+            if now < unblock_time:
                 self.log(f"{act} is currently blocked until {unblock_time}.", level="WARNING")
                 return True
             else:
                 del self.blocked_actuators[act]  # Unblock the actuator
+
+        if act in self.manual_blocks:
+            unblock_time = self.manual_blocks[act]
+            if now < unblock_time:
+                self.log(f"{act} is manually blocked until {unblock_time}.", level="WARNING")
+                return True
+            else:
+                del self.manual_blocks[act]  # Unblock manual block
+
         return False
 
     def track_switch(self, act):
@@ -125,11 +141,6 @@ class ModelExecutor(hass.Hass):
         all_rules: pd.DataFrame,
     ):
 
-        """
-        Check states when making an action based on prediction.
-        For an Actuator, don't execute predction when there is a case
-        where the same state is seen in the rules, but the state is different
-        """
         self.log("Executing: verify_rules")
 
         t = time.process_time()
@@ -176,16 +187,7 @@ class ModelExecutor(hass.Hass):
         new_rule: pd.DataFrame,
         all_rules: pd.DataFrame,
     ):
-        """
-        Add a new rule to the rules engine if:
-        1) New Actuator activity occurs
-        2) All the states are the same as last states
-        3) Time past within training_time.
 
-        Rule will include - states of all entities, except for the actuator - entity_id and state.
-
-        No return
-        """
         self.log("Executing: add_rules")
         t = time.process_time()
 
@@ -224,6 +226,7 @@ class ModelExecutor(hass.Hass):
             and last_update_time > now_minus_training_time
         ):
             new_rule["state"] = np.where(new_rule["state"] == "on", 1, 0)
+            new_rule["importance"] = new_rule.get("importance", 1) * (0.93 if new_state == "off" else 1)
             new_all_rules = pd.concat([all_rules, new_rule]).drop_duplicates()
 
             if not new_all_rules.equals(all_rules):
@@ -238,9 +241,6 @@ class ModelExecutor(hass.Hass):
             self.log(f"---add_rules {elapsed_time}")
 
     def load_models(self):
-        """
-        Loads all models to a dictionary
-        """
         actuators = tsh_config.actuators
         act_model_set = {}
         for act in actuators:
@@ -256,7 +256,6 @@ class ModelExecutor(hass.Hass):
         return act_model_set
 
     def get_base_columns(self):
-        # Get feature list from parsed data header, set all columns to 0
         base_columns = pd.read_pickle(
             f"{tsh_config.data_dir}/parsed/act_states.pkl"
         ).columns
@@ -375,7 +374,6 @@ class ModelExecutor(hass.Hass):
                                     self.log_automatic_action(act, "ausgeschaltet")
                                 else:
                                     self.log(f"---{act} is blocked, skipping action.")
-
 
                     else:
                         self.log("Ignore Disabled actuator")

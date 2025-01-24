@@ -27,7 +27,6 @@ class ModelExecutor(hass.Hass):
         self.automation_triggered = set()  # Track which entities were triggered by automation
         self.switch_logs = {}  # Track recent switch times for each actuator
         self.blocked_actuators = {}  # Track blocked actuators with unblocking times
-        self.manual_blocks = {}  # Track manual blocks
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
@@ -86,44 +85,21 @@ class ModelExecutor(hass.Hass):
 
     def log_manual_action(self, act, state):
         """
-        Logs an action that was triggered manually and adjusts blocking and rule importance.
+        Logs an action that was triggered manually.
         """
         self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
 
-        # Block automation for 90 seconds after manual intervention
-        self.manual_blocks[act] = datetime.datetime.now() + datetime.timedelta(seconds=90)
-        self.log(f"Automatisierung für {act} für 90 Sekunden blockiert.", level="WARNING")
-
-        # Adjust rule weight
-        with sql.connect(self.states_db) as con:
-            all_rules = pd.read_sql(f"SELECT * FROM rules_engine WHERE entity_id='{act}'", con=con)
-            if not all_rules.empty:
-                all_rules["importance"] = all_rules.get("importance", 1) * 1.07
-                all_rules.to_sql("rules_engine", con=con, if_exists="replace", index=False)
-                self.log(f"Regelgewicht für {act} um 7% erhöht.", level="INFO")
-
     def is_blocked(self, act):
         """
-        Check if an actuator is currently blocked (manual or automatic).
+        Check if an actuator is currently blocked.
         """
-        now = datetime.datetime.now()
-
         if act in self.blocked_actuators:
             unblock_time = self.blocked_actuators[act]
-            if now < unblock_time:
+            if datetime.datetime.now() < unblock_time:
                 self.log(f"{act} is currently blocked until {unblock_time}.", level="WARNING")
                 return True
             else:
                 del self.blocked_actuators[act]  # Unblock the actuator
-
-        if act in self.manual_blocks:
-            unblock_time = self.manual_blocks[act]
-            if now < unblock_time:
-                self.log(f"{act} is manually blocked until {unblock_time}.", level="WARNING")
-                return True
-            else:
-                del self.manual_blocks[act]  # Unblock manual block
-
         return False
 
     def track_switch(self, act):
@@ -248,7 +224,6 @@ class ModelExecutor(hass.Hass):
             and last_update_time > now_minus_training_time
         ):
             new_rule["state"] = np.where(new_rule["state"] == "on", 1, 0)
-            new_rule["importance"] = new_rule.get("importance", 1) * (0.93 if new_state == "off" else 1)
             new_all_rules = pd.concat([all_rules, new_rule]).drop_duplicates()
 
             if not new_all_rules.equals(all_rules):
@@ -407,3 +382,10 @@ class ModelExecutor(hass.Hass):
             for act in actuators:
                 current_state = all_states[act]["state"]
 
+                if act not in self.last_states or self.last_states[act]["state"] != current_state:
+                    if act in self.automation_triggered:
+                        self.automation_triggered.remove(act)  # Clear automation mark
+                    else:
+                        self.log_manual_action(act, current_state)
+
+            self.last_states = self.get_state()

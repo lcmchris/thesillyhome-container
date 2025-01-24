@@ -76,6 +76,13 @@ class ModelExecutor(hass.Hass):
         self.track_switch(act)
         if self.is_blocked(act):
             self.log(f"Automatische Aktion blockiert: {act} wurde nicht {action} (zu viele Schaltvorgänge).", level="WARNING")
+        # Adjust rule weight
+        with sql.connect(self.states_db) as con:
+            all_rules = pd.read_sql(f"SELECT * FROM rules_engine WHERE entity_id='{act}'", con=con)
+            if not all_rules.empty:
+                all_rules["importance"] = all_rules.get("importance", 1) / 0.09
+                all_rules.to_sql("rules_engine", con=con, if_exists="replace", index=False)
+                self.log(f"Regelgewicht für {act} um 7% verringert.", level="INFO")
             return
         self.log(f"Automatisch: {act} wurde {action}.", level="INFO")
 
@@ -85,28 +92,41 @@ class ModelExecutor(hass.Hass):
         """
         self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
 
-        # Block automation for 90 seconds after manual intervention
-        self.manual_blocks[act] = datetime.datetime.now() + datetime.timedelta(seconds=90)
-        self.log(f"Automatisierung für {act} für 90 Sekunden blockiert.", level="WARNING")
+        # Block automation for 900 seconds after manual intervention
+        self.manual_blocks[act] = datetime.datetime.now() + datetime.timedelta(seconds=900)
+        self.log(f"Automatisierung für {act} für 900 Sekunden blockiert.", level="WARNING")
 
         # Adjust rule weight
         with sql.connect(self.states_db) as con:
             all_rules = pd.read_sql(f"SELECT * FROM rules_engine WHERE entity_id='{act}'", con=con)
             if not all_rules.empty:
-                all_rules["importance"] = all_rules.get("importance", 1) * 1.07
+                all_rules["importance"] = all_rules.get("importance", 1) * 0.07
                 all_rules.to_sql("rules_engine", con=con, if_exists="replace", index=False)
                 self.log(f"Regelgewicht für {act} um 7% erhöht.", level="INFO")
 
     def is_blocked(self, act):
         now = datetime.datetime.now()
-
+    
+        # Prüfen auf automatische Blockierung
         if act in self.blocked_actuators:
             unblock_time = self.blocked_actuators[act]
             if now < unblock_time:
                 self.log(f"{act} is currently blocked until {unblock_time}.", level="WARNING")
                 return True
             else:
-                del self.blocked_actuators[act]  # Unblock the actuator
+                del self.blocked_actuators[act]  # Automatische Blockierung aufheben
+
+    # Prüfen auf manuelle Blockierung
+    if act in self.manual_blocks:
+        unblock_time = self.manual_blocks[act]
+        if now < unblock_time:
+            self.log(f"{act} is manually blocked until {unblock_time}.", level="WARNING")
+            return True
+        else:
+            del self.manual_blocks[act]  # Manuelle Blockierung aufheben
+
+    return False
+
 
         if act in self.manual_blocks:
             unblock_time = self.manual_blocks[act]
@@ -127,11 +147,11 @@ class ModelExecutor(hass.Hass):
             self.switch_logs[act] = deque(maxlen=10)  # Keep the last 10 switches
         self.switch_logs[act].append(now)
 
-        # Check if the actuator has switched more than 4 times in the last 10 seconds
+        # Check if the actuator has switched more than 6 times in the last 10 seconds
         recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 10]
-        if len(recent_switches) > 4:
-            self.blocked_actuators[act] = now + datetime.timedelta(seconds=90)
-            self.log(f"{act} has been blocked for 90 seconds due to excessive switching.", level="ERROR")
+        if len(recent_switches) > 6:
+            self.blocked_actuators[act] = now + datetime.timedelta(seconds=900)
+            self.log(f"{act} has been blocked for 900 seconds due to excessive switching.", level="ERROR")
 
     def verify_rules(
         self,

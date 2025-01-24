@@ -17,10 +17,10 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, auc
 import pickle
 import logging
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
-
 
 def save_visual_tree(model, actuator, feature_vector):
     # plot tree
@@ -29,11 +29,9 @@ def save_visual_tree(model, actuator, feature_vector):
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
 
-
 # apply threshold to positive probabilities to create labels
 def to_labels(pos_probs, threshold):
     return (pos_probs >= threshold).astype("int")
-
 
 def optimization_fucntion(precision, recall):
     # convert to f score
@@ -43,7 +41,6 @@ def optimization_fucntion(precision, recall):
     # locate the index of the largest f score
     ix = np.argmax(optimizer)
     return ix, optimizer
-
 
 def train_all_actuator_models():
     """
@@ -116,16 +113,20 @@ def train_all_actuator_models():
         y = output_vector
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.85)
 
-        # # Weighting more recent observations more. 3 times if in top 50 percent
-        sample_weight = np.ones(len(X_train))
-        sample_weight[: int(len(sample_weight) * 0.15)] = 0.6
+        # Define a base weight for all samples
+        base_weight = 0.5
 
-        # Weighting duplicates less
-        sample_weight = sample_weight * X_train["duplicate"]
-        X_train = X_train.drop(columns="duplicate")
-        X_test = X_test.drop(columns="duplicate")
-        y_train = y_train.drop(columns="duplicate")
-        y_test = y_test.drop(columns="duplicate")
+        # Create weights with higher emphasis on recent observations
+        n_samples = len(X_train)
+        recent_weight = np.linspace(base_weight, 0.8, n_samples)  # Linearly scale weights
+        scaler = MinMaxScaler(feature_range=(base_weight, 0.8))
+        sample_weight = scaler.fit_transform(recent_weight.reshape(-1, 1)).flatten()
+
+        # Dynamically reduce weights for duplicates
+        if "duplicate" in X_train.columns:
+            sample_weight = sample_weight * X_train["duplicate"]
+            X_train = X_train.drop(columns="duplicate")
+            X_test = X_test.drop(columns="duplicate")
 
         train_all_classifiers(
             model_types,
@@ -150,12 +151,14 @@ def train_all_actuator_models():
     except:
         logging.warning("No metrics.")
 
-    best_metrics_matrix.to_json(
-        "/thesillyhome_src/frontend/static/data/metrics_matrix.json", orient="records"
-    )
+    metrics_path = "/thesillyhome_src/frontend/static/data/metrics_matrix.json"
+    if not os.path.exists(metrics_path):
+        with open(metrics_path, "w") as f:
+            f.write("[]")  # Initialisiert eine leere JSON-Datei
+
+    best_metrics_matrix.to_json(metrics_path, orient="records")
 
     logging.info("Completed!")
-
 
 def train_all_classifiers(
     model_types,
@@ -190,10 +193,11 @@ def train_all_classifiers(
             save_visual_tree(model, actuator, feature_list)
 
         # Get predictions of model
-        y_predictions_proba = model.predict_proba(X_test)
-
-        # keep probabilities for the positive outcome only
-        y_predictions_proba = y_predictions_proba[:, 1]
+        if len(model.classes_) > 1:
+            y_predictions_proba = model.predict_proba(X_test)[:, 1]
+        else:
+            logging.warning(f"Skipping {actuator} with {model_name}: only one class present.")
+            continue
 
         # calculate roc curves
         precision, recall, thresholds = precision_recall_curve(
@@ -211,11 +215,10 @@ def train_all_classifiers(
         plt.xlabel("Recall")
         plt.ylabel("Precision")
         plt.legend()
-        # show the plot
 
         y_predictions_best = to_labels(y_predictions_proba, thresholds[ix])
 
-        # # Extract predictions for each output variable and calculate accuracy and f1 score
+        # Extract predictions for each output variable and calculate accuracy and f1 score
         accuracy_best = accuracy_score(y_test, y_predictions_best)
         precision_best = precision_score(y_test, y_predictions_best)
         recall_best = recall_score(y_test, y_predictions_best)
@@ -237,7 +240,7 @@ def train_all_classifiers(
         filename = open(f"{model_directory}/{model_name}.pkl", "wb")
         pickle.dump(model, filename)
 
-        # Save model to disk
+        # Save best model
         if optimizer[ix] > best_model:
             if precision_best > 0.7 and not tsh_config.startup_disable_all:
                 metrics_json["model_enabled"] = True
@@ -257,7 +260,6 @@ def train_all_classifiers(
         f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png"
     )
     plt.close()
-
 
 if __name__ == "__main__":
     FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

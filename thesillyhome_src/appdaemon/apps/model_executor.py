@@ -86,8 +86,23 @@ class ModelExecutor(hass.Hass):
     def log_manual_action(self, act, state):
         """
         Logs an action that was triggered manually.
+        If the actuator was automatically triggered in the last 60 seconds,
+        it blocks the actuator for 300 seconds.
         """
+        now = datetime.datetime.now()
+
+        # Check if the actuator was triggered automatically within the last 60 seconds
+        if act in self.switch_logs:
+            recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 60]
+            if recent_switches:
+                # Block the actuator for 300 seconds
+                self.blocked_actuators[act] = now + datetime.timedelta(seconds=300)
+                self.log(f"Manuell: {act} wurde geändert auf {state}. Automatische Aktion in den letzten 60 Sekunden erkannt. {act} ist jetzt für 300 Sekunden blockiert.", level="WARNING")
+                return
+
+        # Default manual action logging if no recent automatic action was found
         self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
+        self.blocked_actuators[act] = now + datetime.timedelta(seconds=600)
 
     def is_blocked(self, act):
         """

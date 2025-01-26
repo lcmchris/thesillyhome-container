@@ -7,7 +7,7 @@ volumes:
 services:
   thesillyhome:
     container_name: thesillyhome
-    image: Lightningpicture/thesillyhome-container:beta_v1.1.2
+    image: Lightningpicture/thesillyhome-container:beta_v1.2.2
 
     restart: unless-stopped
     volumes:

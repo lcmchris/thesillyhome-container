@@ -28,4 +28,4 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            lightningpicture/amd64-thesillyhome-dev:beta_v1.2.1
+            lightningpicture/amd64-thesillyhome-dev:beta_v1.1.3

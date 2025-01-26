@@ -28,4 +28,4 @@ jobs:
           platforms: linux/aarch64
           push: true
           tags: |
-            lightningpicture/aarch64-thesillyhome-dev:beta_v1.0.9
+            lightningpicture/aarch64-thesillyhome-dev:beta_v1.1.2

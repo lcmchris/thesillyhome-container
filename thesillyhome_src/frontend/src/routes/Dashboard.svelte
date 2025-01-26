@@ -17,7 +17,8 @@
 	async function getImage(path) {
 		const query = new URLSearchParams();
 		query.set('path', String(path));
-		const response = await fetch(`/api/GetImage/?${query.toString()}`);
+		const basePath = import.meta.env.BASE_PATH || '/';
+const response = await fetch(`${basePath}api/GetImage/?${query.toString()}`);
 		const image = await response.json();
 		return image.message;
 	}
@@ -25,7 +26,7 @@
 	async function update_enable(data) {
 		console.log('Saving to file');
 		console.log(data);
-		await fetch('/api/UpdateMetricsJson', {
+		await fetch(`${basePath}api/UpdateMetricsJson`, {
 			method: 'POST',
 			body: JSON.stringify(data),
 			headers: {

@@ -1,1 +1,34 @@
 
+{
+    "name": "The Silly Home Proxy",
+    "version": "1.0.0",
+    "slug": "the_silly_home_proxy",
+    "description": "Proxy for The Silly Home to work with Home Assistant Ingress",
+    "arch": [
+        "aarch64",
+        "amd64",
+        "armhf",
+        "armv7",
+        "i386"
+    ],
+    "startup": "services",
+    "boot": "auto",
+    "ingress": true,
+    "panel_icon": "mdi:home-assistant",
+    "panel_title": "The Silly Home",
+    "ports": {
+        "8099/tcp": null
+    },
+    "ports_description": {
+        "8099/tcp": "Frontend TCP port for The Silly Home"
+    },
+    "options": {
+        "server": "http://localhost:2300",
+        "auth_token": ""
+    },
+    "schema": {
+        "server": "url",
+        "auth_token": "str?"
+    },
+    "image": "local/the_silly_home_proxy-{arch}"
+}

@@ -13,8 +13,7 @@ const config = {
         vite: {
             server: {
                 fs: {
-                    // Zugriff auf statische Dateien erlauben
-                    allow: ['static'],
+                    allow: ['static'], // Zugriff auf das 'static/'-Verzeichnis erlauben
                 },
             },
         },

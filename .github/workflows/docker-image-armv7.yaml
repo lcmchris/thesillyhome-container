@@ -28,4 +28,4 @@ jobs:
           platforms: linux/arm/v7
           push: true
           tags: |
-            lightningpicture/armv7-thesillyhome-dev:beta_v1.0.9
+            lightningpicture/armv7-thesillyhome-dev:beta_v1.1.2

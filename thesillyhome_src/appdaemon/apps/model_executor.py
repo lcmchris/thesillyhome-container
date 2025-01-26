@@ -44,9 +44,6 @@ class ModelExecutor(hass.Hass):
         return enabled_actuators
 
     def init_db(self):
-        """
-        Initialize db with all potential hot encoded features.
-        """
         with sql.connect(self.states_db) as con:
             feature_list = self.get_base_columns()
             feature_list = self.unverified_features(feature_list)
@@ -62,9 +59,6 @@ class ModelExecutor(hass.Hass):
                 self.log(f"DB already exists. Skipping", level="INFO")
 
     def unverified_features(self, feature_list):
-        """
-        There are features that shouldn't be verified. hour_, weekday_, last_state_
-        """
         feature_list = self.get_new_feature_list(feature_list, "hour_")
         feature_list = self.get_new_feature_list(feature_list, "last_state_")
         feature_list = self.get_new_feature_list(feature_list, "weekday_")
@@ -73,10 +67,6 @@ class ModelExecutor(hass.Hass):
         return feature_list
 
     def log_automatic_action(self, act, action):
-        """
-        Logs an action that was triggered automatically.
-        Adds flipping detection to prevent excessive toggling.
-        """
         self.track_switch(act)
         if self.is_blocked(act):
             self.log(f"Automatische Aktion blockiert: {act} wurde nicht {action} (zu viele Schaltvorgänge).", level="WARNING")
@@ -84,49 +74,34 @@ class ModelExecutor(hass.Hass):
         self.log(f"Automatisch: {act} wurde {action}.", level="INFO")
 
     def log_manual_action(self, act, state):
-        """
-        Logs an action that was triggered manually.
-        If the actuator was automatically triggered in the last 60 seconds,
-        it blocks the actuator for 300 seconds.
-        """
         now = datetime.datetime.now()
 
-        # Check if the actuator was triggered automatically within the last 60 seconds
         if act in self.switch_logs:
             recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 60]
             if recent_switches:
-                # Block the actuator for 300 seconds
                 self.blocked_actuators[act] = now + datetime.timedelta(seconds=300)
                 self.log(f"Manuell: {act} wurde geändert auf {state}. Automatische Aktion in den letzten 60 Sekunden erkannt. {act} ist jetzt für 300 Sekunden blockiert.", level="WARNING")
                 return
 
-        # Default manual action logging if no recent automatic action was found
         self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
         self.blocked_actuators[act] = now + datetime.timedelta(seconds=600)
 
     def is_blocked(self, act):
-        """
-        Check if an actuator is currently blocked.
-        """
         if act in self.blocked_actuators:
             unblock_time = self.blocked_actuators[act]
             if datetime.datetime.now() < unblock_time:
                 self.log(f"{act} is currently blocked until {unblock_time}.", level="WARNING")
                 return True
             else:
-                del self.blocked_actuators[act]  # Unblock the actuator
+                del self.blocked_actuators[act]
         return False
 
     def track_switch(self, act):
-        """
-        Track recent switch times for an actuator and block if necessary.
-        """
         now = datetime.datetime.now()
         if act not in self.switch_logs:
-            self.switch_logs[act] = deque(maxlen=10)  # Keep the last 10 switches
+            self.switch_logs[act] = deque(maxlen=10)
         self.switch_logs[act].append(now)
 
-        # Check if the actuator has switched more than 4 times in the last 30 seconds
         recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 30]
         if len(recent_switches) > 6:
             self.blocked_actuators[act] = now + datetime.timedelta(seconds=900)
@@ -139,12 +114,6 @@ class ModelExecutor(hass.Hass):
         prediction: int,
         all_rules: pd.DataFrame,
     ):
-
-        """
-        Check states when making an action based on prediction.
-        For an Actuator, don't execute predction when there is a case
-        where the same state is seen in the rules, but the state is different
-        """
         self.log("Executing: verify_rules")
 
         t = time.process_time()
@@ -191,16 +160,6 @@ class ModelExecutor(hass.Hass):
         new_rule: pd.DataFrame,
         all_rules: pd.DataFrame,
     ):
-        """
-        Add a new rule to the rules engine if:
-        1) New Actuator activity occurs
-        2) All the states are the same as last states
-        3) Time past within training_time.
-
-        Rule will include - states of all entities, except for the actuator - entity_id and state.
-
-        No return
-        """
         self.log("Executing: add_rules")
         t = time.process_time()
 
@@ -253,9 +212,6 @@ class ModelExecutor(hass.Hass):
             self.log(f"---add_rules {elapsed_time}")
 
     def load_models(self):
-        """
-        Loads all models to a dictionary
-        """
         actuators = tsh_config.actuators
         act_model_set = {}
         for act in actuators:
@@ -271,7 +227,6 @@ class ModelExecutor(hass.Hass):
         return act_model_set
 
     def get_base_columns(self):
-        # Get feature list from parsed data header, set all columns to 0
         base_columns = pd.read_pickle(
             f"{tsh_config.data_dir}/parsed/act_states.pkl"
         ).columns
@@ -304,7 +259,6 @@ class ModelExecutor(hass.Hass):
             current_state_base = pd.DataFrame(columns=feature_list)
             current_state_base.loc[0] = 0
 
-            # Get current state of all sensors for model input
             df_sen_states = copy.deepcopy(current_state_base)
             for sensor in sensors:
                 true_state = self.get_state(entity_id=sensor)
@@ -329,52 +283,39 @@ class ModelExecutor(hass.Hass):
                 all_rules = all_rules.drop(columns=["index"])
 
             enabled_actuators = self.read_actuators()
-            if entity in actuators:
-                if self.is_blocked(entity):
-                    return  # Do not proceed if the actuator is blocked
-
-                new_rule = df_sen_states.copy()
-                new_rule = new_rule[self.get_new_feature_list(feature_list, entity)]
-                new_rule = new_rule[
-                    self.unverified_features(new_rule.columns.values.tolist())
-                ]
-                new_rule["entity_id"] = entity
-                new_rule["state"] = new
-                training_time = 20
-                self.add_rules(training_time, entity, new, new_rule, all_rules)
 
             if entity in sensors:
                 for act, model in self.act_model_set.items():
-                    if act in enabled_actuators:
-                        self.log(f"Prediction sequence for: {act}")
+                    self.log(f"Prediction sequence for: {act}")
 
-                        df_sen_states_less = df_sen_states[
-                            self.get_new_feature_list(feature_list, act)
-                        ]
+                    df_sen_states_less = df_sen_states[
+                        self.get_new_feature_list(feature_list, act)
+                    ]
 
-                        prediction = model.predict(df_sen_states_less)
+                    prediction = model.predict(df_sen_states_less)
 
-                        rule_to_verify = df_sen_states_less.copy()
-                        rule_to_verify = rule_to_verify[
-                            self.unverified_features(
-                                rule_to_verify.columns.values.tolist()
-                            )
-                        ]
-                        rule_to_verify["entity_id"] = act
+                    rule_to_verify = df_sen_states_less.copy()
+                    rule_to_verify = rule_to_verify[
+                        self.unverified_features(
+                            rule_to_verify.columns.values.tolist()
+                        )
+                    ]
+                    rule_to_verify["entity_id"] = act
 
-                        if self.verify_rules(
-                            act, rule_to_verify, prediction, all_rules
-                        ):
-                            self.log(
-                                f"---Predicted {act} as {prediction}", level="INFO"
-                            )
+                    if self.verify_rules(
+                        act, rule_to_verify, prediction, all_rules
+                    ):
+                        self.log(
+                            f"---Predicted {act} as {prediction}", level="INFO"
+                        )
 
+                        if act in enabled_actuators:
                             if (prediction == 1) and (all_states[act]["state"] != "on"):
                                 if not self.is_blocked(act):
                                     self.log(f"---Turn on {act}")
                                     self.turn_on(act)
-                                    self.track_switch(act)  # Track the switch event
-                                    self.automation_triggered.add(act)  # Mark as triggered by automation
+                                    self.track_switch(act)
+                                    self.automation_triggered.add(act)
                                     self.log_automatic_action(act, "eingeschaltet")
                                 else:
                                     self.log(f"---{act} is blocked, skipping action.")
@@ -385,21 +326,29 @@ class ModelExecutor(hass.Hass):
                                 if not self.is_blocked(act):
                                     self.log(f"---Turn off {act}")
                                     self.turn_off(act)
-                                    self.track_switch(act)  # Track the switch event
-                                    self.automation_triggered.add(act)  # Mark as triggered by automation
+                                    self.track_switch(act)
+                                    self.automation_triggered.add(act)
                                     self.log_automatic_action(act, "ausgeschaltet")
                                 else:
                                     self.log(f"---{act} is blocked, skipping action.")
 
-                    else:
-                        self.log("Ignore Disabled actuator")
+                        else:
+                            current_state = all_states[act]["state"]
+                            correct_prediction = (
+                                (prediction == 1 and current_state == "on") or
+                                (prediction == 0 and current_state == "off")
+                            )
+                            if correct_prediction:
+                                self.log(f"---Prediction for {act} was correct.", level="INFO")
+                            else:
+                                self.log(f"---Prediction for {act} was incorrect.", level="WARNING")
 
             for act in actuators:
                 current_state = all_states[act]["state"]
 
                 if act not in self.last_states or self.last_states[act]["state"] != current_state:
                     if act in self.automation_triggered:
-                        self.automation_triggered.remove(act)  # Clear automation mark
+                        self.automation_triggered.remove(act)
                     else:
                         self.log_manual_action(act, current_state)
 

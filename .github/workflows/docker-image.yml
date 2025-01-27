@@ -4,7 +4,6 @@ on:
   push:
     branches: [ "master" ]
 
-
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -31,11 +30,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      # Define a dynamic tag (e.g., date + commit SHA)
+      # Define a dynamic tag (e.g., date + short commit SHA)
       - name: Define dynamic tag
         id: tag
         run: |
-          TAG=$(date +%Y%m%d)-${{ github.sha::0:7 }}
+          TAG=$(date +%Y%m%d)-$(echo $GITHUB_SHA | cut -c1-7)
           echo "tag=$TAG" >> $GITHUB_ENV
 
       # Build and push Docker images for multiple architectures
@@ -45,16 +44,19 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --push \
-            -t lightningpicture/amd64-thesillyhome-dev:${{ env.tag }} 
+            -t lightningpicture/amd64-thesillyhome-dev:${{ env.tag }} \
+            -t lightningpicture/amd64-thesillyhome-dev:latest .
 
           # Build and push for aarch64
           docker buildx build \
             --platform linux/arm64 \
             --push \
-            -t lightningpicture/aarch64-thesillyhome-dev:${{ env.tag }}
+            -t lightningpicture/aarch64-thesillyhome-dev:${{ env.tag }} \
+            -t lightningpicture/aarch64-thesillyhome-dev:latest .
 
           # Build and push for armv7
           docker buildx build \
             --platform linux/arm/v7 \
             --push \
-            -t lightningpicture/armv7-thesillyhome-dev:${{ env.tag }} 
+            -t lightningpicture/armv7-thesillyhome-dev:${{ env.tag }} \
+            -t lightningpicture/armv7-thesillyhome-dev:latest .

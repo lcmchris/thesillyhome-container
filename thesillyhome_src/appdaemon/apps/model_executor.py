@@ -77,10 +77,10 @@ class ModelExecutor(hass.Hass):
         now = datetime.datetime.now()
 
         if act in self.switch_logs:
-            recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 60]
+            recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 90]
             if recent_switches:
-                self.blocked_actuators[act] = now + datetime.timedelta(seconds=300)
-                self.log(f"Manuell: {act} wurde geändert auf {state}. Automatische Aktion in den letzten 60 Sekunden erkannt. {act} ist jetzt für 300 Sekunden blockiert.", level="WARNING")
+                self.blocked_actuators[act] = now + datetime.timedelta(seconds=1800)
+                self.log(f"Manuell: {act} wurde geändert auf {state}. Automatische Aktion in den letzten 90 Sekunden erkannt. {act} ist jetzt für 1800 Sekunden blockiert.", level="WARNING")
                 return
 
         self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")

@@ -105,15 +105,20 @@ def train_all_actuator_models():
         scaler = StandardScaler()
         feature_vector_scaled = scaler.fit_transform(feature_vector)
 
+        # Speichere die Indizes vor der Aufteilung
+        train_indices = feature_vector.index
+
+        # Aufteilen der Daten
         X_train, X_test, y_train, y_test = train_test_split(feature_vector_scaled, output_vector, test_size=0.3)
 
         # Anpassung: Gewichtung basierend auf Alter der Daten
         current_time = pd.Timestamp.now()
-        time_threshold = current_time - pd.Timedelta(days=10)  
+        time_threshold = current_time - pd.Timedelta(days=10)
 
-        # Gewicht für ältere und neuere Daten
+        # Gewicht für ältere und neuere Daten basierend auf den ursprünglichen Indizes
+        train_indices_series = pd.Series(train_indices[:len(X_train)])  # Konvertiere Indizes zu Series
         sample_weight = np.where(
-            X_train.index < time_threshold,  # Bedingung: Index (Zeitstempel oder Vergleich)
+            train_indices_series < time_threshold,  # Vergleich mit Timestamp
             0.7,  # Gewicht für ältere Daten
             0.3   # Gewicht für neuere Daten
         )

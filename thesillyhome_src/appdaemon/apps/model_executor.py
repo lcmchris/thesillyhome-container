@@ -84,7 +84,9 @@ class ModelExecutor(hass.Hass):
                 return
 
         self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
-        self.blocked_actuators[act] = now + datetime.timedelta(seconds=900)
+
+        self.blocked_actuators[act] = now + datetime.timedelta(seconds=1800)
+
 
     def is_blocked(self, act):
         if act in self.blocked_actuators:
@@ -104,7 +106,9 @@ class ModelExecutor(hass.Hass):
 
         recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 30]
         if len(recent_switches) > 6:
-            self.blocked_actuators[act] = now + datetime.timedelta(seconds=1200)
+
+            self.blocked_actuators[act] = now + datetime.timedelta(seconds=1500)
+
             self.log(f"{act} has been blocked for 900 seconds due to excessive switching.", level="ERROR")
 
     def verify_rules(

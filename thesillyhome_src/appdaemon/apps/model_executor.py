@@ -12,10 +12,10 @@ import pytz
 import numpy as np
 import time
 import json
+from collections import deque
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
-
 
 class ModelExecutor(hass.Hass):
     def initialize(self):
@@ -24,6 +24,9 @@ class ModelExecutor(hass.Hass):
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
         self.last_states = self.get_state()
         self.last_event_time = datetime.datetime.now()
+        self.automation_triggered = set()  # Track which entities were triggered by automation
+        self.switch_logs = {}  # Track recent switch times for each actuator
+        self.blocked_actuators = {}  # Track blocked actuators with unblocking times
         self.init_db()
         self.log("Hello from TheSillyHome")
         self.log("TheSillyHome Model Executor fully initialized!")
@@ -68,6 +71,66 @@ class ModelExecutor(hass.Hass):
         feature_list = self.get_new_feature_list(feature_list, "switch")
 
         return feature_list
+
+    def log_automatic_action(self, act, action):
+        """
+        Logs an action that was triggered automatically.
+        Adds flipping detection to prevent excessive toggling.
+        """
+        self.track_switch(act)
+        if self.is_blocked(act):
+            self.log(f"Automatische Aktion blockiert: {act} wurde nicht {action} (zu viele Schaltvorgänge).", level="WARNING")
+            return
+        self.log(f"Automatisch: {act} wurde {action}.", level="INFO")
+
+    def log_manual_action(self, act, state):
+        """
+        Logs an action that was triggered manually.
+        If the actuator was automatically triggered in the last 60 seconds,
+        it blocks the actuator for 300 seconds.
+        """
+        now = datetime.datetime.now()
+
+        # Check if the actuator was triggered automatically within the last 60 seconds
+        if act in self.switch_logs:
+            recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 90]
+            if recent_switches:
+                # Block the actuator for 300 seconds
+                self.blocked_actuators[act] = now + datetime.timedelta(seconds=1800)
+                self.log(f"Manuell: {act} wurde geändert auf {state}. Automatische Aktion in den letzten 90 Sekunden erkannt. {act} ist jetzt für 1800 Sekunden blockiert.", level="WARNING")
+                return
+
+        # Default manual action logging if no recent automatic action was found
+        self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
+        self.blocked_actuators[act] = now + datetime.timedelta(seconds=900)
+
+    def is_blocked(self, act):
+        """
+        Check if an actuator is currently blocked.
+        """
+        if act in self.blocked_actuators:
+            unblock_time = self.blocked_actuators[act]
+            if datetime.datetime.now() < unblock_time:
+                self.log(f"{act} is currently blocked until {unblock_time}.", level="WARNING")
+                return True
+            else:
+                del self.blocked_actuators[act]  # Unblock the actuator
+        return False
+
+    def track_switch(self, act):
+        """
+        Track recent switch times for an actuator and block if necessary.
+        """
+        now = datetime.datetime.now()
+        if act not in self.switch_logs:
+            self.switch_logs[act] = deque(maxlen=10)  # Keep the last 10 switches
+        self.switch_logs[act].append(now)
+
+        # Check if the actuator has switched more than 4 times in the last 30 seconds
+        recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 30]
+        if len(recent_switches) > 6:
+            self.blocked_actuators[act] = now + datetime.timedelta(seconds=1800)
+            self.log(f"{act} has been blocked for 1800 seconds due to excessive switching.", level="ERROR")
 
     def verify_rules(
         self,
@@ -155,9 +218,6 @@ class ModelExecutor(hass.Hass):
         del last_states_tmp[actuator]
         del current_states_tmp[actuator]
 
-        # self.log(last_states_tmp)
-        # self.log(current_states_tmp)
-
         states_no_change = last_states_tmp == current_states_tmp
 
         last_update_time = datetime.datetime.strptime(
@@ -191,7 +251,6 @@ class ModelExecutor(hass.Hass):
         else:
             elapsed_time = time.process_time() - t
             self.log(f"---add_rules {elapsed_time}")
-            self.log(f"---Rules not added")
 
     def load_models(self):
         """
@@ -240,7 +299,6 @@ class ModelExecutor(hass.Hass):
             self.log(f"\n")
             self.log(f"<--- {entity} is {new} --->")
 
-            # Get feature list from parsed data header, set all columns to 0
             feature_list = self.get_base_columns()
 
             current_state_base = pd.DataFrame(columns=feature_list)
@@ -260,16 +318,9 @@ class ModelExecutor(hass.Hass):
             last_states = self.last_states
             all_states = self.get_state()
 
-            # Extract current date
-            # datetime object containing current date and time
-            # dd/mm/YY H:M:S
             df_sen_states[f"hour_{now.hour}"] = 1
             df_sen_states[f"weekday_{now.weekday()}"] = 1
-            self.log(
-                f"Time is : hour_{now.hour} & weekday_{now.weekday()}", level="DEBUG"
-            )
 
-            # Check rules for actuators against rules engine
             with sql.connect(self.states_db) as con:
                 all_rules = pd.read_sql(
                     f"SELECT * FROM rules_engine",
@@ -279,25 +330,24 @@ class ModelExecutor(hass.Hass):
 
             enabled_actuators = self.read_actuators()
             if entity in actuators:
-                # Adding rules
+                if self.is_blocked(entity):
+                    return  # Do not proceed if the actuator is blocked
+
                 new_rule = df_sen_states.copy()
-                # Don't check the device's state itself
                 new_rule = new_rule[self.get_new_feature_list(feature_list, entity)]
                 new_rule = new_rule[
                     self.unverified_features(new_rule.columns.values.tolist())
                 ]
                 new_rule["entity_id"] = entity
                 new_rule["state"] = new
-                training_time = 10
+                training_time = 20
                 self.add_rules(training_time, entity, new, new_rule, all_rules)
 
-            # Execute all models for sensor and set states
             if entity in sensors:
                 for act, model in self.act_model_set.items():
                     if act in enabled_actuators:
                         self.log(f"Prediction sequence for: {act}")
 
-                        # the actuators feature state should not affect the model and also the duplicate column
                         df_sen_states_less = df_sen_states[
                             self.get_new_feature_list(feature_list, act)
                         ]
@@ -315,21 +365,42 @@ class ModelExecutor(hass.Hass):
                         if self.verify_rules(
                             act, rule_to_verify, prediction, all_rules
                         ):
-                            # Execute actions
                             self.log(
                                 f"---Predicted {act} as {prediction}", level="INFO"
                             )
+
                             if (prediction == 1) and (all_states[act]["state"] != "on"):
-                                self.log(f"---Turn on {act}")
-                                self.turn_on(act)
+                                if not self.is_blocked(act):
+                                    self.log(f"---Turn on {act}")
+                                    self.turn_on(act)
+                                    self.track_switch(act)  # Track the switch event
+                                    self.automation_triggered.add(act)  # Mark as triggered by automation
+                                    self.log_automatic_action(act, "eingeschaltet")
+                                else:
+                                    self.log(f"---{act} is blocked, skipping action.")
+
                             elif (prediction == 0) and (
                                 all_states[act]["state"] != "off"
                             ):
-                                self.log(f"---Turn off {act}")
-                                self.turn_off(act)
-                            else:
-                                self.log(f"---{act} state has not changed.")
+                                if not self.is_blocked(act):
+                                    self.log(f"---Turn off {act}")
+                                    self.turn_off(act)
+                                    self.track_switch(act)  # Track the switch event
+                                    self.automation_triggered.add(act)  # Mark as triggered by automation
+                                    self.log_automatic_action(act, "ausgeschaltet")
+                                else:
+                                    self.log(f"---{act} is blocked, skipping action.")
+
                     else:
                         self.log("Ignore Disabled actuator")
+
+            for act in actuators:
+                current_state = all_states[act]["state"]
+
+                if act not in self.last_states or self.last_states[act]["state"] != current_state:
+                    if act in self.automation_triggered:
+                        self.automation_triggered.remove(act)  # Clear automation mark
+                    else:
+                        self.log_manual_action(act, current_state)
 
             self.last_states = self.get_state()

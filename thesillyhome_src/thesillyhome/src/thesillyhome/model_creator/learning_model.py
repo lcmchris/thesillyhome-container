@@ -72,8 +72,8 @@ def train_all_actuator_models():
             logging.info(f"No cases found for {actuator}")
             continue
 
-        if len(df_act) < 30:
-            logging.info("Samples less than 30. Skipping")
+        if len(df_act) < 90:
+            logging.info("Samples less than 90. Skipping")
             continue
 
         if df_act["state"].nunique() == 1:
@@ -87,11 +87,20 @@ def train_all_actuator_models():
 
         X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.3)
 
-        base_weight = 0.4
-        n_samples = len(X_train)
-        recent_weight = np.logspace(0.1, 0.6, n_samples, base=2)
-        scaler = MinMaxScaler(feature_range=(base_weight, 0.7))
-        sample_weight = scaler.fit_transform(recent_weight.reshape(-1, 1)).flatten()
+        # Anpassung: Gewichtung basierend auf Alter der Daten
+        current_time = pd.Timestamp.now()
+        time_threshold = current_time - pd.Timedelta(days=10)  
+
+        # Gewicht für ältere und neuere Daten
+        sample_weight = np.where(
+            X_train.index < time_threshold,  # Bedingung: Index (Zeitstempel oder Vergleich)
+            0.7,  # Gewicht für ältere Daten
+            0.3   # Gewicht für neuere Daten
+        )
+
+        # Normierung der Gewichte, falls notwendig
+        scaler = MinMaxScaler(feature_range=(0.3, 0.7))  # Bereich der Gewichtung
+        sample_weight = scaler.fit_transform(sample_weight.reshape(-1, 1)).flatten()
 
         if "duplicate" in X_train.columns:
             sample_weight *= X_train["duplicate"]
@@ -166,7 +175,7 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
 
         metrics_matrix.append(metrics_json)
 
-        if optimizer[ix] > best_model and metrics_json["precision"] > 0.7:
+        if optimizer[ix] > best_model and metrics_json["precision"] > 0.85:
             metrics_json["model_enabled"] = True
             best_model = optimizer[ix]
             save_model(model, f"{model_directory}/best_model.pkl")

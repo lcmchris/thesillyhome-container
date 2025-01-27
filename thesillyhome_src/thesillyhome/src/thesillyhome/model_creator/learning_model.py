@@ -12,7 +12,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import precision_recall_curve, accuracy_score, precision_score, recall_score, auc
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -29,9 +30,9 @@ def to_labels(pos_probs, threshold):
     return (pos_probs >= threshold).astype("int")
 
 def optimization_function(precision, recall):
-    """Calculates the optimal threshold based on a custom optimization metric."""
+    """Favorisiert moderate Thresholds durch Gewichtung von Precision und Recall."""
     epsilon = 0.01
-    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
+    optimizer = (1.5 * precision * recall) / (0.5 * precision + recall + epsilon)
     ix = np.argmax(optimizer)
     return ix, optimizer
 
@@ -46,19 +47,34 @@ def train_all_actuator_models():
     model_types = {
         "DecisionTreeClassifier": {
             "classifier": DecisionTreeClassifier,
-            "model_kwargs": {},
+            "model_kwargs": {
+                "max_depth": 7,
+                "min_samples_split": 5,
+                "min_samples_leaf": 3,
+            },
         },
         "LogisticRegression": {
             "classifier": LogisticRegression,
-            "model_kwargs": {"max_iter": 10000},
+            "model_kwargs": {
+                "max_iter": 10000,
+                "C": 0.5,
+            },
         },
         "RandomForestClassifier": {
             "classifier": RandomForestClassifier,
-            "model_kwargs": {},
+            "model_kwargs": {
+                "n_estimators": 100,
+                "max_depth": 10,
+                "min_samples_split": 5,
+                "min_samples_leaf": 3,
+            },
         },
         "SVMClassifier": {
             "classifier": SVC,
-            "model_kwargs": {"probability": True},
+            "model_kwargs": {
+                "probability": True,
+                "C": 0.5,
+            },
         },
     }
 
@@ -72,8 +88,8 @@ def train_all_actuator_models():
             logging.info(f"No cases found for {actuator}")
             continue
 
-        if len(df_act) < 30:
-            logging.info("Samples less than 30. Skipping")
+        if len(df_act) < 90:
+            logging.info("Samples less than 90. Skipping")
             continue
 
         if df_act["state"].nunique() == 1:
@@ -85,13 +101,26 @@ def train_all_actuator_models():
         feature_list = sorted(list(set(act_list) - set(cur_act_list)))
         feature_vector = df_act[feature_list]
 
-        X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.3)
+        # Normierung der Eingabedaten
+        scaler = StandardScaler()
+        feature_vector_scaled = scaler.fit_transform(feature_vector)
 
-        base_weight = 0.4
-        n_samples = len(X_train)
-        recent_weight = np.logspace(0.1, 0.6, n_samples, base=2)
-        scaler = MinMaxScaler(feature_range=(base_weight, 0.7))
-        sample_weight = scaler.fit_transform(recent_weight.reshape(-1, 1)).flatten()
+        X_train, X_test, y_train, y_test = train_test_split(feature_vector_scaled, output_vector, test_size=0.3)
+
+        # Anpassung: Gewichtung basierend auf Alter der Daten
+        current_time = pd.Timestamp.now()
+        time_threshold = current_time - pd.Timedelta(days=10)  
+
+        # Gewicht für ältere und neuere Daten
+        sample_weight = np.where(
+            X_train.index < time_threshold,  # Bedingung: Index (Zeitstempel oder Vergleich)
+            0.7,  # Gewicht für ältere Daten
+            0.3   # Gewicht für neuere Daten
+        )
+
+        # Normierung der Gewichte, falls notwendig
+        scaler_weights = MinMaxScaler(feature_range=(0.3, 0.7))  # Bereich der Gewichtung
+        sample_weight = scaler_weights.fit_transform(sample_weight.reshape(-1, 1)).flatten()
 
         if "duplicate" in X_train.columns:
             sample_weight *= X_train["duplicate"]
@@ -127,6 +156,11 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
         model = model_vars["classifier"](**model_vars["model_kwargs"])
         try:
             model.fit(X_train, y_train, sample_weight=sample_weight)
+
+            # Kalibrierung des Modells
+            calibrated_model = CalibratedClassifierCV(base_estimator=model, method='sigmoid', cv=3)
+            calibrated_model.fit(X_train, y_train, sample_weight=sample_weight)
+            model = calibrated_model
         except Exception as e:
             logging.warning(f"Training failed for {model_name} on {actuator}: {e}")
             continue
@@ -166,7 +200,7 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
 
         metrics_matrix.append(metrics_json)
 
-        if optimizer[ix] > best_model and metrics_json["precision"] > 0.7:
+        if optimizer[ix] > best_model and metrics_json["precision"] > 0.85:
             metrics_json["model_enabled"] = True
             best_model = optimizer[ix]
             save_model(model, f"{model_directory}/best_model.pkl")

@@ -12,7 +12,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import precision_recall_curve, accuracy_score, precision_score, recall_score, auc
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
@@ -29,9 +30,9 @@ def to_labels(pos_probs, threshold):
     return (pos_probs >= threshold).astype("int")
 
 def optimization_function(precision, recall):
-    """Calculates the optimal threshold based on a custom optimization metric."""
+    """Favorisiert moderate Thresholds durch Gewichtung von Precision und Recall."""
     epsilon = 0.01
-    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
+    optimizer = (1.5 * precision * recall) / (0.5 * precision + recall + epsilon)
     ix = np.argmax(optimizer)
     return ix, optimizer
 
@@ -46,19 +47,34 @@ def train_all_actuator_models():
     model_types = {
         "DecisionTreeClassifier": {
             "classifier": DecisionTreeClassifier,
-            "model_kwargs": {},
+            "model_kwargs": {
+                "max_depth": 7,
+                "min_samples_split": 5,
+                "min_samples_leaf": 3,
+            },
         },
         "LogisticRegression": {
             "classifier": LogisticRegression,
-            "model_kwargs": {"max_iter": 10000},
+            "model_kwargs": {
+                "max_iter": 10000,
+                "C": 0.5,
+            },
         },
         "RandomForestClassifier": {
             "classifier": RandomForestClassifier,
-            "model_kwargs": {},
+            "model_kwargs": {
+                "n_estimators": 100,
+                "max_depth": 10,
+                "min_samples_split": 5,
+                "min_samples_leaf": 3,
+            },
         },
         "SVMClassifier": {
             "classifier": SVC,
-            "model_kwargs": {"probability": True},
+            "model_kwargs": {
+                "probability": True,
+                "C": 0.5,
+            },
         },
     }
 
@@ -85,7 +101,11 @@ def train_all_actuator_models():
         feature_list = sorted(list(set(act_list) - set(cur_act_list)))
         feature_vector = df_act[feature_list]
 
-        X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.3)
+        # Normierung der Eingabedaten
+        scaler = StandardScaler()
+        feature_vector_scaled = scaler.fit_transform(feature_vector)
+
+        X_train, X_test, y_train, y_test = train_test_split(feature_vector_scaled, output_vector, test_size=0.3)
 
         # Anpassung: Gewichtung basierend auf Alter der Daten
         current_time = pd.Timestamp.now()
@@ -99,8 +119,8 @@ def train_all_actuator_models():
         )
 
         # Normierung der Gewichte, falls notwendig
-        scaler = MinMaxScaler(feature_range=(0.3, 0.7))  # Bereich der Gewichtung
-        sample_weight = scaler.fit_transform(sample_weight.reshape(-1, 1)).flatten()
+        scaler_weights = MinMaxScaler(feature_range=(0.3, 0.7))  # Bereich der Gewichtung
+        sample_weight = scaler_weights.fit_transform(sample_weight.reshape(-1, 1)).flatten()
 
         if "duplicate" in X_train.columns:
             sample_weight *= X_train["duplicate"]
@@ -136,6 +156,11 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
         model = model_vars["classifier"](**model_vars["model_kwargs"])
         try:
             model.fit(X_train, y_train, sample_weight=sample_weight)
+
+            # Kalibrierung des Modells
+            calibrated_model = CalibratedClassifierCV(base_estimator=model, method='sigmoid', cv=3)
+            calibrated_model.fit(X_train, y_train, sample_weight=sample_weight)
+            model = calibrated_model
         except Exception as e:
             logging.warning(f"Training failed for {model_name} on {actuator}: {e}")
             continue

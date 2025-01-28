@@ -12,41 +12,34 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import precision_recall_curve, accuracy_score, precision_score, recall_score, auc
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.calibration import CalibratedClassifierCV
 
 # Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
 
-
-def save_visual_tree(model, actuator, feature_list):
-    feature_list_mapped = [tsh_config.sensor_name_map.get(feature, feature) for feature in feature_list]
+def save_visual_tree(model, actuator, feature_vector):
+    """Saves a visual representation of a decision tree."""
     plt.figure(figsize=(12, 12))
-    plot_tree(model, fontsize=10, feature_names=feature_list_mapped, max_depth=7)
+    plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=7)
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
-
-
 
 def to_labels(pos_probs, threshold):
     """Converts probabilities to binary labels based on a threshold."""
     return (pos_probs >= threshold).astype("int")
 
-
 def optimization_function(precision, recall):
-    """Calculates the optimal threshold based on a custom optimization metric."""
+    """Favorisiert moderate Thresholds durch Gewichtung von Precision und Recall."""
     epsilon = 0.01
-    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
+    optimizer = (1.5 * precision * recall) / (0.5 * precision + recall + epsilon)
     ix = np.argmax(optimizer)
     return ix, optimizer
-
 
 def train_all_actuator_models():
     """Trains models for each actuator."""
     actuators = tsh_config.actuators
-    df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl").reset_index(drop=True)
-
-    # Sort data by ascending timestamps
-    df_act_states.sort_values(by="last_updated", ascending=True, inplace=True)
+    df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").reset_index(drop=True)
 
     output_list = tsh_config.output_list.copy()
     act_list = list(set(df_act_states.columns) - set(output_list))
@@ -95,8 +88,8 @@ def train_all_actuator_models():
             logging.info(f"No cases found for {actuator}")
             continue
 
-        if len(df_act) < 60:
-            logging.info("Samples less than 60. Skipping")
+        if len(df_act) < 90:
+            logging.info("Samples less than 90. Skipping")
             continue
 
         if df_act["state"].nunique() == 1:
@@ -108,16 +101,29 @@ def train_all_actuator_models():
         feature_list = sorted(list(set(act_list) - set(cur_act_list)))
         feature_vector = df_act[feature_list]
 
-        # Generate weights for ASC data
-        weights = np.linspace(0.3, 0.7, len(df_act))
-        df_act["weight"] = weights
+        # Normierung der Eingabedaten
+        scaler = StandardScaler()
+        feature_vector_scaled = scaler.fit_transform(feature_vector)
 
-        X_train, X_test, y_train, y_test, weights_train, weights_test = train_test_split(
-            feature_vector, output_vector, df_act["weight"], test_size=0.4
+        X_train, X_test, y_train, y_test = train_test_split(feature_vector_scaled, output_vector, test_size=0.3)
+
+        # Anpassung: Gewichtung basierend auf Alter der Daten
+        current_time = pd.Timestamp.now()
+        time_threshold = current_time - pd.Timedelta(days=10)  
+
+        # Gewicht für ältere und neuere Daten
+        sample_weight = np.where(
+            X_train.index < time_threshold,  # Bedingung: Index (Zeitstempel oder Vergleich)
+            0.4,  # Gewicht für ältere Daten
+            0.3   # Gewicht für neuere Daten
         )
 
+        # Normierung der Gewichte, falls notwendig
+        scaler_weights = MinMaxScaler(feature_range=(0.3, 0.5))  # Bereich der Gewichtung
+        sample_weight = scaler_weights.fit_transform(sample_weight.reshape(-1, 1)).flatten()
+
         if "duplicate" in X_train.columns:
-            weights_train *= X_train["duplicate"]
+            sample_weight *= X_train["duplicate"]
             X_train = X_train.drop(columns="duplicate")
             X_test = X_test.drop(columns="duplicate")
 
@@ -128,7 +134,7 @@ def train_all_actuator_models():
             X_test,
             y_train,
             y_test,
-            weights_train,
+            sample_weight,
             metrics_matrix,
             feature_list,
         )
@@ -136,8 +142,8 @@ def train_all_actuator_models():
     save_metrics(metrics_matrix)
     logging.info("Completed!")
 
-
 def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_test, sample_weight, metrics_matrix, feature_list):
+    """Trains all classifiers and saves their results."""
     logging.info(f"---Training samples = {len(y_train)}")
 
     model_directory = f"{tsh_config.data_dir}/model/{actuator}"
@@ -147,15 +153,16 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
     for model_name, model_vars in model_types.items():
         logging.info(f"---Running training for {model_name}")
 
-        # Convert target values to numeric
-        y_train_numeric = y_train.replace({"on": 1, "off": 0})
-        y_test_numeric = y_test.replace({"on": 1, "off": 0})
-
         model = model_vars["classifier"](**model_vars["model_kwargs"])
         try:
-            model.fit(X_train, y_train_numeric, sample_weight=sample_weight)
+            model.fit(X_train, y_train, sample_weight=sample_weight)
+
+            # Kalibrierung des Modells
+            calibrated_model = CalibratedClassifierCV(base_estimator=model, method='sigmoid', cv=3)
+            calibrated_model.fit(X_train, y_train, sample_weight=sample_weight)
+            model = calibrated_model
         except Exception as e:
-            logging.error(f"Training failed for {model_name} on {actuator}: {e}")
+            logging.warning(f"Training failed for {model_name} on {actuator}: {e}")
             continue
 
         if model_name == "DecisionTreeClassifier":
@@ -167,19 +174,24 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
             logging.warning(f"Skipping {actuator} with {model_name}: only one class present.")
             continue
 
-        precision, recall, thresholds = precision_recall_curve(y_test_numeric, y_predictions_proba)
-
+        precision, recall, thresholds = precision_recall_curve(y_test, y_predictions_proba)
         ix, optimizer = optimization_function(precision, recall)
         auc_ = auc(recall, precision)
+
+        plt.plot(precision, recall, label=model_name)
+        plt.scatter(precision[ix], recall[ix], marker="o", label=f"{model_name}")
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.legend()
 
         y_predictions_best = to_labels(y_predictions_proba, thresholds[ix])
 
         metrics_json = {
             "actuator": actuator,
             "classifier_name": model_name,
-            "accuracy": accuracy_score(y_test_numeric, y_predictions_best),
-            "precision": precision_score(y_test_numeric, y_predictions_best),
-            "recall": recall_score(y_test_numeric, y_predictions_best),
+            "accuracy": accuracy_score(y_test, y_predictions_best),
+            "precision": precision_score(y_test, y_predictions_best),
+            "recall": recall_score(y_test, y_predictions_best),
             "AUC": auc_,
             "best_thresh": thresholds[ix],
             "best_optimizer": optimizer[ix],
@@ -188,22 +200,22 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
 
         metrics_matrix.append(metrics_json)
 
-        if optimizer[ix] > best_model and metrics_json["precision"] > 0.7:
+        if optimizer[ix] > best_model and metrics_json["precision"] > 0.85:
             metrics_json["model_enabled"] = True
             best_model = optimizer[ix]
             save_model(model, f"{model_directory}/best_model.pkl")
 
         save_model(model, f"{model_directory}/{model_name}.pkl")
 
-    save_plots(actuator, y_train_numeric)
-
+    save_plots(actuator, y_train)
 
 def save_model(model, filepath):
+    """Saves a model to a specified filepath."""
     with open(filepath, "wb") as file:
         pickle.dump(model, file)
 
-
 def save_plots(actuator, y_train):
+    """Saves precision-recall plots."""
     plt.plot(
         [0, 1],
         [y_train.sum() / len(y_train), y_train.sum() / len(y_train)],
@@ -213,8 +225,8 @@ def save_plots(actuator, y_train):
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png")
     plt.close()
 
-
 def save_metrics(metrics_matrix):
+    """Saves the metrics to a file."""
     df_metrics_matrix = pd.DataFrame(metrics_matrix)
     df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
 
@@ -232,7 +244,6 @@ def save_metrics(metrics_matrix):
             f.write("[]")
 
     best_metrics_matrix.to_json(metrics_path, orient="records")
-
 
 if __name__ == "__main__":
     FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

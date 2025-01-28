@@ -18,13 +18,12 @@ from sklearn.preprocessing import MinMaxScaler
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 
-def save_visual_tree(model, actuator, feature_vector):
-    feature_names = feature_vector.columns.tolist()  # Extrahiert Spaltennamen
+def save_visual_tree(model, actuator, feature_list):
+    """Saves a visual representation of a decision tree."""
     plt.figure(figsize=(12, 12))
-    plot_tree(model, fontsize=10, feature_names=feature_names, max_depth=7)
+    plot_tree(model, fontsize=10, feature_names=feature_list, max_depth=7)
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
-
 
 
 def to_labels(pos_probs, threshold):
@@ -147,7 +146,7 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
     for model_name, model_vars in model_types.items():
         logging.info(f"---Running training for {model_name}")
 
-        # Zielwerte in numerische Werte konvertieren
+        # Convert target values to numeric
         y_train_numeric = y_train.replace({"on": 1, "off": 0})
         y_test_numeric = y_test.replace({"on": 1, "off": 0})
 

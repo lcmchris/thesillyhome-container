@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -38,11 +38,13 @@ def optimization_function(precision, recall):
 def train_all_actuator_models():
     """Trains models for each actuator."""
     actuators = tsh_config.actuators
-    df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").reset_index(drop=True)
+    df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/all_states.pkl").reset_index(drop=True)
+
+    # Sort data by ascending timestamps
+    df_act_states.sort_values(by="last_updated", ascending=True, inplace=True)
 
     output_list = tsh_config.output_list.copy()
     act_list = list(set(df_act_states.columns) - set(output_list))
-
 
     model_types = {
         "DecisionTreeClassifier": {
@@ -77,7 +79,7 @@ def train_all_actuator_models():
             },
         },
     }
-    
+
     metrics_matrix = []
 
     for actuator in actuators:
@@ -88,8 +90,8 @@ def train_all_actuator_models():
             logging.info(f"No cases found for {actuator}")
             continue
 
-        if len(df_act) < 30:
-            logging.info("Samples less than 30. Skipping")
+        if len(df_act) < 60:
+            logging.info("Samples less than 60. Skipping")
             continue
 
         if df_act["state"].nunique() == 1:
@@ -101,16 +103,16 @@ def train_all_actuator_models():
         feature_list = sorted(list(set(act_list) - set(cur_act_list)))
         feature_vector = df_act[feature_list]
 
-        X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.3)
+        # Generate weights for ASC data
+        weights = np.linspace(0.5, 0.4, len(df_act))  # Older data = 0.3, Newer data = 0.7
+        df_act["weight"] = weights
 
-        base_weight = 0.4
-        n_samples = len(X_train)
-        recent_weight = np.logspace(0.1, 0.6, n_samples, base=2)
-        scaler = MinMaxScaler(feature_range=(base_weight, 0.7))
-        sample_weight = scaler.fit_transform(recent_weight.reshape(-1, 1)).flatten()
+        X_train, X_test, y_train, y_test, weights_train, weights_test = train_test_split(
+            feature_vector, output_vector, df_act["weight"], test_size=0.4
+        )
 
         if "duplicate" in X_train.columns:
-            sample_weight *= X_train["duplicate"]
+            weights_train *= X_train["duplicate"]
             X_train = X_train.drop(columns="duplicate")
             X_test = X_test.drop(columns="duplicate")
 
@@ -121,7 +123,7 @@ def train_all_actuator_models():
             X_test,
             y_train,
             y_test,
-            sample_weight,
+            weights_train,
             metrics_matrix,
             feature_list,
         )

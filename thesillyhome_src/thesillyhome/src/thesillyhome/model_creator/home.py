@@ -89,7 +89,7 @@ class homedb:
             old_state_id \
         FROM ranked_states \
         WHERE row_num <= 2000 \
-        ORDER BY entity_id, last_updated DESC;"
+        ORDER BY entity_id, last_updated ASC;"
 
         with self.mydb.connect() as con:
             con = con.execution_options(stream_results=True)

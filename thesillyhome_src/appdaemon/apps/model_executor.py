@@ -132,57 +132,71 @@ class ModelExecutor(hass.Hass):
     def get_new_feature_list(self, feature_list, device):
         return sorted([f for f in feature_list if not f.startswith(device)])
 
-    def state_handler(self, entity, attribute, old, new, kwargs):
-        sensors = tsh_config.sensors
-        actuators = tsh_config.actuators
-        devices = tsh_config.devices
-        all_states = self.get_state()
-        if entity not in devices or self.is_blocked(entity):
-            return
-        feature_list = self.get_base_columns()
-        current_state_base = pd.DataFrame(columns=feature_list).loc[[0]]
-        df_sen_states = copy.deepcopy(current_state_base)
-        for sensor in sensors:
-            true_state = self.get_state(entity_id=sensor)
-            if f"{sensor}_{true_state}" in df_sen_states.columns:
-                df_sen_states[f"{sensor}_{true_state}"] = 1
-        now = datetime.datetime.now()
-        df_sen_states[f"hour_{now.hour}"] = 1
-        df_sen_states[f"weekday_{now.weekday()}"] = 1
-        with sql.connect(self.states_db) as con:
-            try:
-                all_rules = pd.read_sql("SELECT * FROM rules_engine", con=con).drop(columns=["index"])
-            except Exception as e:
-                all_rules = pd.DataFrame(columns=["entity_id", "state"])
-                self.log(f"Keine Regeln gefunden: {e}", level="WARNING")
-        enabled_actuators = self.read_actuators()
-        if entity in actuators:
-            new_rule = df_sen_states.copy()
-            new_rule = new_rule[self.get_new_feature_list(feature_list, entity)]
-            new_rule["entity_id"] = entity
-            new_rule["state"] = new
-            self.add_rules(20, entity, new, new_rule, all_rules)
-        if entity in sensors:
-            for act, model in self.act_model_set.items():
-                if act in enabled_actuators:
-                    df_sen_states_less = df_sen_states[self.get_new_feature_list(feature_list, act)]
-                    prediction = model.predict(df_sen_states_less)
-                    rule_to_verify = df_sen_states_less.copy()
-                    rule_to_verify["entity_id"] = act
-                    if self.verify_rules(act, rule_to_verify, prediction, all_rules):
-                        if prediction == 1 and all_states[act]["state"] != "on":
-                            self.turn_on(act)
-                            self.track_switch(act)
-                            self.log_automatic_action(act, "eingeschaltet")
-                        elif prediction == 0 and all_states[act]["state"] != "off":
-                            self.turn_off(act)
-                            self.track_switch(act)
-                            self.log_automatic_action(act, "ausgeschaltet")
-            for act in actuators:
-                current_state = all_states[act]["state"]
-                if act not in self.last_states or self.last_states[act]["state"] != current_state:
-                    if act in self.automation_triggered:
-                        self.automation_triggered.remove(act)
-                    else:
-                        self.log_manual_action(act, current_state)
-            self.last_states = all_states
+def state_handler(self, entity, attribute, old, new, kwargs):
+    sensors = tsh_config.sensors
+    actuators = tsh_config.actuators
+    devices = tsh_config.devices
+    all_states = self.get_state()
+
+    if entity not in devices or self.is_blocked(entity):
+        return
+
+    feature_list = self.get_base_columns()
+    # Erstelle eine DataFrame und füge explizit eine Zeile mit Standardwerten hinzu
+    current_state_base = pd.DataFrame(columns=feature_list)
+    current_state_base.loc[0] = [0] * len(feature_list)  # Initialisiert alle Werte auf 0
+    df_sen_states = copy.deepcopy(current_state_base)
+
+    for sensor in sensors:
+        true_state = self.get_state(entity_id=sensor)
+        if f"{sensor}_{true_state}" in df_sen_states.columns:
+            df_sen_states[f"{sensor}_{true_state}"] = 1
+
+    now = datetime.datetime.now()
+    df_sen_states[f"hour_{now.hour}"] = 1
+    df_sen_states[f"weekday_{now.weekday()}"] = 1
+
+    with sql.connect(self.states_db) as con:
+        try:
+            all_rules = pd.read_sql("SELECT * FROM rules_engine", con=con).drop(columns=["index"])
+        except Exception as e:
+            all_rules = pd.DataFrame(columns=["entity_id", "state"])
+            self.log(f"Keine Regeln gefunden: {e}", level="WARNING")
+
+    enabled_actuators = self.read_actuators()
+
+    if entity in actuators:
+        new_rule = df_sen_states.copy()
+        new_rule = new_rule[self.get_new_feature_list(feature_list, entity)]
+        new_rule["entity_id"] = entity
+        new_rule["state"] = new
+        self.add_rules(20, entity, new, new_rule, all_rules)
+
+    if entity in sensors:
+        for act, model in self.act_model_set.items():
+            if act in enabled_actuators:
+                df_sen_states_less = df_sen_states[self.get_new_feature_list(feature_list, act)]
+                prediction = model.predict(df_sen_states_less)
+                rule_to_verify = df_sen_states_less.copy()
+                rule_to_verify["entity_id"] = act
+
+                if self.verify_rules(act, rule_to_verify, prediction, all_rules):
+                    if prediction == 1 and all_states[act]["state"] != "on":
+                        self.turn_on(act)
+                        self.track_switch(act)
+                        self.log_automatic_action(act, "eingeschaltet")
+                    elif prediction == 0 and all_states[act]["state"] != "off":
+                        self.turn_off(act)
+                        self.track_switch(act)
+                        self.log_automatic_action(act, "ausgeschaltet")
+
+    for act in actuators:
+        current_state = all_states[act]["state"]
+        if act not in self.last_states or self.last_states[act]["state"] != current_state:
+            if act in self.automation_triggered:
+                self.automation_triggered.remove(act)
+            else:
+                self.log_manual_action(act, current_state)
+
+    self.last_states = all_states
+

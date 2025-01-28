@@ -6,9 +6,11 @@ import numpy as np
 import datetime
 import sqlite3 as sql
 from collections import deque
+import pytz
 import thesillyhome.model_creator.read_config_json as tsh_config
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
+
 
 class ModelExecutor:
     def initialize(self):
@@ -22,6 +24,7 @@ class ModelExecutor:
         self.init_db()
 
     def read_actuators(self):
+        """Liest die aktivierten Aktoren aus der Metrikdatei."""
         enabled_actuators = set()
         with open("/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r") as f:
             metrics_data = json.load(f)
@@ -31,6 +34,7 @@ class ModelExecutor:
         return enabled_actuators
 
     def init_db(self):
+        """Initialisiert die Datenbank mit den verfügbaren Features."""
         with sql.connect(self.states_db) as con:
             feature_list = self.get_base_columns()
             feature_list = self.unverified_features(feature_list)
@@ -40,25 +44,8 @@ class ModelExecutor:
             db_rules_engine["state"] = 1
             db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
 
-    def extract_sensor_behavior(self, df, sensor_column, related_columns, time_window=5):
-        for related in related_columns:
-            df[f"{sensor_column}_change_in_{related}"] = df[related].diff(periods=time_window)
-        return df
-
-    def classify_sensor_types(self, df, sensor_column, related_columns, model):
-        X = df[related_columns]
-        return model.predict(X)
-
-    def adjust_sensor_weights(self, X_train, sensor_types):
-        for sensor, sensor_type in sensor_types.items():
-            if sensor in X_train.columns:
-                if sensor_type == "door":
-                    X_train[sensor] *= 2
-                elif sensor_type == "window":
-                    X_train[sensor] *= 0.5
-        return X_train
-
     def state_handler(self, entity, attribute, old, new, kwargs):
+        """Wird ausgelöst, wenn sich der Zustand eines Sensors oder Aktors ändert."""
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
         float_sensors = tsh_config.float_sensors
@@ -125,6 +112,7 @@ class ModelExecutor:
             self.last_states = self.get_state()
 
     def verify_rules(self, act, rules_to_verify, prediction, all_rules):
+        """Überprüft, ob Vorhersagen mit bestehenden Regeln übereinstimmen."""
         all_rules = all_rules[all_rules["entity_id"] == act]
         if not all_rules.empty:
             matching_rule = all_rules.merge(rules_to_verify)
@@ -137,6 +125,7 @@ class ModelExecutor:
         return True
 
     def add_rules(self, training_time, actuator, new_state, new_rule, all_rules):
+        """Fügt neue Regeln zur Datenbank hinzu."""
         utc = pytz.UTC
         last_states_tmp = {k: self.last_states[k] for k in tsh_config.devices if k in self.last_states}
         current_states_tmp = {k: self.get_state()[k] for k in tsh_config.devices if k in self.get_state()}
@@ -156,6 +145,7 @@ class ModelExecutor:
                     new_rule.to_sql("rules_engine", con=con, if_exists="append")
 
     def load_models(self):
+        """Lädt trainierte Modelle für Aktoren."""
         actuators = tsh_config.actuators
         act_model_set = {}
         for act in actuators:
@@ -165,6 +155,7 @@ class ModelExecutor:
         return act_model_set
 
     def get_base_columns(self):
+        """Extrahiert Basis-Features aus den Daten."""
         base_columns = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").columns
         base_columns = sorted(list(set(base_columns) - set(["entity_id", "state", "duplicate"])))
         return base_columns

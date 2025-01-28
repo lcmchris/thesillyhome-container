@@ -19,11 +19,12 @@ import thesillyhome.model_creator.read_config_json as tsh_config
 
 
 def save_visual_tree(model, actuator, feature_list):
-    """Saves a visual representation of a decision tree."""
+    feature_list_mapped = [tsh_config.sensor_name_map.get(feature, feature) for feature in feature_list]
     plt.figure(figsize=(12, 12))
-    plot_tree(model, fontsize=10, feature_names=feature_list, max_depth=7)
+    plot_tree(model, fontsize=10, feature_names=feature_list_mapped, max_depth=7)
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
+
 
 
 def to_labels(pos_probs, threshold):

@@ -34,7 +34,7 @@ jobs:
       - name: Define dynamic tag
         id: tag
         run: |
-          TAG=$(date +%Y%m%d)-$(echo $GITHUB_SHA | cut -c1-7)_v1.2.0_p3
+          TAG=$(date +%Y%m%d)-$(echo $GITHUB_SHA | cut -c1-7)_v1.2.0_p4
           echo "tag=$TAG" >> $GITHUB_ENV
 
       # Build and push Docker images for multiple architectures

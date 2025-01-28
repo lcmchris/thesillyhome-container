@@ -7,6 +7,8 @@ import datetime
 import sqlite3 as sql
 from collections import deque
 import thesillyhome.model_creator.read_config_json as tsh_config
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import train_test_split
 
 class ModelExecutor:
     def initialize(self):

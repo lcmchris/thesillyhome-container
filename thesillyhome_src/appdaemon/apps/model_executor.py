@@ -14,7 +14,6 @@ import time
 import json
 from collections import deque
 
-# Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 class ModelExecutor(hass.Hass):
@@ -340,7 +339,7 @@ class ModelExecutor(hass.Hass):
                 ]
                 new_rule["entity_id"] = entity
                 new_rule["state"] = new
-                training_time = 20
+                training_time = 10
                 self.add_rules(training_time, entity, new, new_rule, all_rules)
 
             if entity in sensors:

@@ -1,137 +1,118 @@
+import os
+import sys
+import pickle
 import logging
 import pandas as pd
 import numpy as np
-from sklearn.tree import DecisionTreeClassifier
+import matplotlib.pyplot as plt
+
+from sklearn.model_selection import train_test_split
+from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score
+from sklearn.metrics import precision_recall_curve, accuracy_score, precision_score, recall_score, auc
+from sklearn.preprocessing import MinMaxScaler
+
+# Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
 
-# Definiere bekannte Domains und Kategorien
-domains_to_columns = {
-    "light": "light",
-    "switch": "light",
-    "sensor": "sensor",
-    "binary_sensor": "sensor",
-    "input_boolean": "helper",
-    "input_number": "helper",
-    "input_text": "helper",
-    "input_select": "helper",
-    "input_datetime": "helper",
-    "input_button": "helper",
-    "cover": "cover",
-    "media_player": "media_player",
-    "person": "person",
-    "sun": "sun",
-    "temperature": "temperature",
-    "humidity": "humidity",
-    "illuminance": "illuminance",
-    "current": "current",
-    "power": "power",
-    "energy": "energy",
-    "volume": "volume",
-    "pressure": "pressure",
-    "voltage": "voltage",
-    "lux": "lux",
-}
+def save_visual_tree(model, actuator, feature_vector):
+    """Saves a visual representation of a decision tree."""
+    plt.figure(figsize=(12, 12))
+    plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=7)
+    plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
+    plt.close()
 
-def train_sensor_type_model(df, sensor_column, related_columns):
-    """Trainiert ein Modell, um Sensoren basierend auf Spalten wie Licht oder Temperatur zu klassifizieren."""
-    X = df[related_columns]
-    y = df[sensor_column].apply(lambda x: "door" if "door" in x else "window" if "window" in x else "other")
-    model = DecisionTreeClassifier(max_depth=5)
-    model.fit(X, y)
-    return model
+def to_labels(pos_probs, threshold):
+    """Converts probabilities to binary labels based on a threshold."""
+    return (pos_probs >= threshold).astype("int")
 
-def adjust_sensor_weights(X_train, sensor_types):
-    """Passt die Gewichtung von Sensorwerten basierend auf deren Typ (z. B. Tür, Fenster) an."""
-    for sensor, sensor_type in sensor_types.items():
-        if sensor in X_train.columns:
-            if sensor_type == "door":
-                X_train[sensor] *= 2
-            elif sensor_type == "window":
-                X_train[sensor] *= 0.5
-    return X_train
-
-def classify_sensor_types(df, sensor_column, related_columns, model):
-    """Klassifiziert Sensoren basierend auf den bereitgestellten Daten."""
-    X = df[related_columns]
-    return model.predict(X)
+def optimization_function(precision, recall):
+    """Calculates the optimal threshold based on a custom optimization metric."""
+    epsilon = 0.01
+    optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
+    ix = np.argmax(optimizer)
+    return ix, optimizer
 
 def train_all_actuator_models():
-    """Trainiert Modelle für alle Aktoren basierend auf den verfügbaren Daten."""
+    """Trains models for each actuator."""
     actuators = tsh_config.actuators
     df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").reset_index(drop=True)
+
     output_list = tsh_config.output_list.copy()
     act_list = list(set(df_act_states.columns) - set(output_list))
 
-    # Definiere Modeltypen und Parameter
+
     model_types = {
         "DecisionTreeClassifier": {
             "classifier": DecisionTreeClassifier,
-            "model_kwargs": {"max_depth": 7, "min_samples_split": 5, "min_samples_leaf": 3},
+            "model_kwargs": {
+                "max_depth": 7,
+                "min_samples_split": 5,
+                "min_samples_leaf": 3,
+            },
         },
         "LogisticRegression": {
             "classifier": LogisticRegression,
-            "model_kwargs": {"max_iter": 10000, "C": 0.5},
+            "model_kwargs": {
+                "max_iter": 10000,
+                "C": 0.5,
+            },
         },
         "RandomForestClassifier": {
             "classifier": RandomForestClassifier,
-            "model_kwargs": {"n_estimators": 100, "max_depth": 10, "min_samples_split": 5, "min_samples_leaf": 3},
+            "model_kwargs": {
+                "n_estimators": 100,
+                "max_depth": 10,
+                "min_samples_split": 5,
+                "min_samples_leaf": 3,
+            },
         },
         "SVMClassifier": {
             "classifier": SVC,
-            "model_kwargs": {"probability": True, "C": 0.5},
+            "model_kwargs": {
+                "probability": True,
+                "C": 0.5,
+            },
         },
     }
-
-    # Pivotiere Daten aus der Datenbankabfrage
-    df_pivoted = df_act_states.pivot(index="state_id", columns="entity_id", values="state")
-
-    # Dynamische Spaltenerstellung
-    related_columns = []
-    for domain, category in domains_to_columns.items():
-        matching_columns = [col for col in df_pivoted.columns if domain in col]
-        if matching_columns:
-            related_columns.extend(matching_columns)
-        else:
-            logging.warning(f"No related columns found for domain '{domain}'.")
-
-    # Fehlende Kategorien hinzufügen, falls nicht vorhanden
-    missing_columns = [domain for domain in domains_to_columns if domain not in related_columns]
-    if missing_columns:
-        logging.warning(f"Missing columns for domains: {missing_columns}. Adding placeholders.")
-        for col in missing_columns:
-            df_pivoted[col] = 0  # Platzhalter-Werte
-        related_columns.extend(missing_columns)
-
-    # Debugging: Protokolliere die gefundenen Spalten
-    logging.info(f"Identified related columns: {related_columns}")
-
-    # Verarbeite und trainiere Modelle
+    
     metrics_matrix = []
-    sensor_column = "entity_id"
-    sensor_model = train_sensor_type_model(df_pivoted, sensor_column, related_columns)
 
     for actuator in actuators:
         logging.info(f"Training model for {actuator}")
         df_act = df_act_states[df_act_states["entity_id"] == actuator]
 
-        if df_act.empty or len(df_act) < 30 or df_act["state"].nunique() == 1:
-            logging.info(f"Skipping {actuator}")
+        if df_act.empty:
+            logging.info(f"No cases found for {actuator}")
+            continue
+
+        if len(df_act) < 30:
+            logging.info("Samples less than 30. Skipping")
+            continue
+
+        if df_act["state"].nunique() == 1:
+            logging.info(f"All cases for {actuator} have the same state. Skipping")
             continue
 
         output_vector = df_act["state"]
-        feature_list = sorted(list(set(act_list) - set([actuator])))
+        cur_act_list = [feature for feature in act_list if feature.startswith(actuator)]
+        feature_list = sorted(list(set(act_list) - set(cur_act_list)))
         feature_vector = df_act[feature_list]
 
-        sensor_types = {sensor: classify_sensor_types(df_act, sensor, related_columns, sensor_model)
-                        for sensor in feature_list}
-        feature_vector = adjust_sensor_weights(feature_vector, sensor_types)
-
         X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.3)
+
+        base_weight = 0.4
+        n_samples = len(X_train)
+        recent_weight = np.logspace(0.1, 0.6, n_samples, base=2)
+        scaler = MinMaxScaler(feature_range=(base_weight, 0.7))
+        sample_weight = scaler.fit_transform(recent_weight.reshape(-1, 1)).flatten()
+
+        if "duplicate" in X_train.columns:
+            sample_weight *= X_train["duplicate"]
+            X_train = X_train.drop(columns="duplicate")
+            X_test = X_test.drop(columns="duplicate")
 
         train_all_classifiers(
             model_types,
@@ -140,7 +121,7 @@ def train_all_actuator_models():
             X_test,
             y_train,
             y_test,
-            None,
+            sample_weight,
             metrics_matrix,
             feature_list,
         )
@@ -149,37 +130,114 @@ def train_all_actuator_models():
     logging.info("Completed!")
 
 def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_test, sample_weight, metrics_matrix, feature_list):
-    """Trainiert und bewertet alle definierten Modelle."""
-    best_model_score = 0
-    for model_name, model_info in model_types.items():
-        model = model_info["classifier"](**model_info["model_kwargs"])
-        model.fit(X_train, y_train)
-        predictions = model.predict(X_test)
-        accuracy = accuracy_score(y_test, predictions)
-        precision = precision_score(y_test, predictions, zero_division=0)
-        recall = recall_score(y_test, predictions, zero_division=0)
+    """Trains all classifiers and saves their results."""
+    logging.info(f"---Training samples = {len(y_train)}")
 
-        metrics_matrix.append({
+    model_directory = f"{tsh_config.data_dir}/model/{actuator}"
+    os.makedirs(model_directory, exist_ok=True)
+
+    best_model = 0
+    for model_name, model_vars in model_types.items():
+        logging.info(f"---Running training for {model_name}")
+
+        model = model_vars["classifier"](**model_vars["model_kwargs"])
+        try:
+            model.fit(X_train, y_train, sample_weight=sample_weight)
+        except Exception as e:
+            logging.warning(f"Training failed for {model_name} on {actuator}: {e}")
+            continue
+
+        if model_name == "DecisionTreeClassifier":
+            save_visual_tree(model, actuator, feature_list)
+
+        if len(model.classes_) > 1:
+            y_predictions_proba = model.predict_proba(X_test)[:, 1]
+        else:
+            logging.warning(f"Skipping {actuator} with {model_name}: only one class present.")
+            continue
+
+        precision, recall, thresholds = precision_recall_curve(y_test, y_predictions_proba)
+        ix, optimizer = optimization_function(precision, recall)
+        auc_ = auc(recall, precision)
+
+        plt.plot(precision, recall, label=model_name)
+        plt.scatter(precision[ix], recall[ix], marker="o", label=f"{model_name}")
+        plt.xlabel("Recall")
+        plt.ylabel("Precision")
+        plt.legend()
+
+        y_predictions_best = to_labels(y_predictions_proba, thresholds[ix])
+
+        metrics_json = {
             "actuator": actuator,
-            "model": model_name,
-            "accuracy": accuracy,
-            "precision": precision,
-            "recall": recall,
-        })
+            "classifier_name": model_name,
+            "accuracy": accuracy_score(y_test, y_predictions_best),
+            "precision": precision_score(y_test, y_predictions_best),
+            "recall": recall_score(y_test, y_predictions_best),
+            "AUC": auc_,
+            "best_thresh": thresholds[ix],
+            "best_optimizer": optimizer[ix],
+            "model_enabled": False,
+        }
 
-        if accuracy > best_model_score:
-            best_model_score = accuracy
-            save_best_model(model, actuator)
+        metrics_matrix.append(metrics_json)
+
+        if optimizer[ix] > best_model and metrics_json["precision"] > 0.7:
+            metrics_json["model_enabled"] = True
+            best_model = optimizer[ix]
+            save_model(model, f"{model_directory}/best_model.pkl")
+
+        save_model(model, f"{model_directory}/{model_name}.pkl")
+
+    save_plots(actuator, y_train)
+
+def save_model(model, filepath):
+    """Saves a model to a specified filepath."""
+    with open(filepath, "wb") as file:
+        pickle.dump(model, file)
+
+def save_plots(actuator, y_train):
+    """Saves precision-recall plots."""
+    plt.plot(
+        [0, 1],
+        [y_train.sum() / len(y_train), y_train.sum() / len(y_train)],
+        linestyle="--",
+        label="No Skill",
+    )
+    plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png")
+    plt.close()
 
 def save_metrics(metrics_matrix):
-    """Speichert die Metriken in einer Datei."""
-    metrics_df = pd.DataFrame(metrics_matrix)
-    metrics_df.to_csv(f"{tsh_config.data_dir}/metrics.csv", index=False)
-    logging.info("Metrics saved.")
+    """Saves the metrics to a file."""
+    df_metrics_matrix = pd.DataFrame(metrics_matrix)
+    df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
 
-def save_best_model(model, actuator):
-    """Speichert das beste Modell für einen Aktor."""
-    filepath = f"{tsh_config.data_dir}/model/{actuator}_best_model.pkl"
-    with open(filepath, "wb") as f:
-        pickle.dump(model, f)
-    logging.info(f"Saved best model for {actuator} at {filepath}.")
+    try:
+        best_metrics_matrix = df_metrics_matrix.fillna(0).sort_values(
+            "best_optimizer", ascending=False
+        ).drop_duplicates(subset=["actuator"], keep="first")
+    except Exception as e:
+        logging.warning(f"No metrics available: {e}")
+        return
+
+    metrics_path = "/thesillyhome_src/frontend/static/data/metrics_matrix.json"
+    if not os.path.exists(metrics_path):
+        with open(metrics_path, "w") as f:
+            f.write("[]")
+
+    best_metrics_matrix.to_json(metrics_path, orient="records")
+
+if __name__ == "__main__":
+    FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    logging.basicConfig(
+        filename="/thesillyhome_src/log/thesillyhome.log",
+        encoding="utf-8",
+        level=logging.INFO,
+        format=FORMAT,
+    )
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(FORMAT))
+    logging.getLogger().addHandler(handler)
+
+    train_all_actuator_models()

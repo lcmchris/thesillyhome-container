@@ -5,6 +5,8 @@ import logging
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import gc
+import psutil
 
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier, plot_tree
@@ -17,27 +19,26 @@ from sklearn.preprocessing import MinMaxScaler
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 def save_visual_tree(model, actuator, feature_vector):
-    """Saves a visual representation of a decision tree."""
     plt.figure(figsize=(12, 12))
     plot_tree(model, fontsize=10, feature_names=feature_vector, max_depth=7)
     plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_tree.png")
     plt.close()
 
 def to_labels(pos_probs, threshold):
-    """Converts probabilities to binary labels based on a threshold."""
     return (pos_probs >= threshold).astype("int")
 
 def optimization_function(precision, recall):
-    """Calculates the optimal threshold based on a custom optimization metric."""
     epsilon = 0.01
     optimizer = (2 * precision * recall) / (1 / 5 * precision + recall + epsilon)
     ix = np.argmax(optimizer)
     return ix, optimizer
 
 def train_all_actuator_models():
-    """Trains models for each actuator."""
     actuators = tsh_config.actuators
-    df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").reset_index(drop=True)
+
+    # Lade die Daten in Blöcken, um Speicher zu sparen
+    df_chunks = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl", chunksize=10000)
+    df_act_states = pd.concat(df_chunks, ignore_index=True)
 
     output_list = tsh_config.output_list.copy()
     act_list = list(set(df_act_states.columns) - set(output_list))
@@ -75,23 +76,15 @@ def train_all_actuator_models():
             },
         },
     }
-    
+
     metrics_matrix = []
 
     for actuator in actuators:
         logging.info(f"Training model for {actuator}")
         df_act = df_act_states[df_act_states["entity_id"] == actuator]
 
-        if df_act.empty:
-            logging.info(f"No cases found for {actuator}")
-            continue
-
-        if len(df_act) < 30:
-            logging.info("Samples less than 30. Skipping")
-            continue
-
-        if df_act["state"].nunique() == 1:
-            logging.info(f"All cases for {actuator} have the same state. Skipping")
+        if df_act.empty or len(df_act) < 30 or df_act["state"].nunique() == 1:
+            logging.info(f"Skipping {actuator} due to insufficient data.")
             continue
 
         output_vector = df_act["state"]
@@ -112,23 +105,16 @@ def train_all_actuator_models():
             X_train = X_train.drop(columns="duplicate")
             X_test = X_test.drop(columns="duplicate")
 
-        train_all_classifiers(
-            model_types,
-            actuator,
-            X_train,
-            X_test,
-            y_train,
-            y_test,
-            sample_weight,
-            metrics_matrix,
-            feature_list,
-        )
+        train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_test, sample_weight, metrics_matrix, feature_list)
+
+        # Speicher freigeben
+        del X_train, X_test, y_train, y_test
+        gc.collect()
 
     save_metrics(metrics_matrix)
     logging.info("Completed!")
 
 def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_test, sample_weight, metrics_matrix, feature_list):
-    """Trains all classifiers and saves their results."""
     logging.info(f"---Training samples = {len(y_train)}")
 
     model_directory = f"{tsh_config.data_dir}/model/{actuator}"
@@ -164,7 +150,7 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
         plt.ylabel("Precision")
         plt.legend()
         plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png")
-        plt.close()  # Ensure plot resources are released
+        plt.close()  # Schließe das Plot-Fenster
 
         y_predictions_best = to_labels(y_predictions_proba, thresholds[ix])
 
@@ -189,20 +175,20 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
 
         save_model(model, f"{model_directory}/{model_name}.pkl")
 
+        # Speicher freigeben und Garbage Collector aufrufen
+        del model
+        gc.collect()
+
 def save_model(model, filepath):
-    """Saves a model to a specified filepath."""
     with open(filepath, "wb") as file:
         pickle.dump(model, file)
 
 def save_metrics(metrics_matrix):
-    """Saves the metrics to a file."""
     df_metrics_matrix = pd.DataFrame(metrics_matrix)
     df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
 
     try:
-        best_metrics_matrix = df_metrics_matrix.fillna(0).sort_values(
-            "best_optimizer", ascending=False
-        ).drop_duplicates(subset=["actuator"], keep="first")
+        best_metrics_matrix = df_metrics_matrix.fillna(0).sort_values("best_optimizer", ascending=False).drop_duplicates(subset=["actuator"], keep="first")
     except Exception as e:
         logging.warning(f"No metrics available: {e}")
         return
@@ -227,4 +213,6 @@ if __name__ == "__main__":
     handler.setFormatter(logging.Formatter(FORMAT))
     logging.getLogger().addHandler(handler)
 
+    logging.info(f"Starting training process... Memory usage: {psutil.virtual_memory().percent}%")
     train_all_actuator_models()
+    logging.info(f"Training completed! Memory usage: {psutil.virtual_memory().percent}%")

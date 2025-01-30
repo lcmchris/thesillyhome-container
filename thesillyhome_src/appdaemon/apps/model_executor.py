@@ -168,23 +168,6 @@ class ModelExecutor(hass.Hass):
         self.log("No matching rules found. Proceeding with prediction.")
         return True
 
-    def add_rules(self, training_time, actuator, new_state, new_rule, all_rules):
-        self.log("Executing: add_rules")
-
-        last_update_time = datetime.datetime.strptime(
-            self.last_states[actuator]["last_updated"], "%Y-%m-%dT%H:%M:%S.%f%z"
-        )
-        if (self.last_states[actuator]["state"] != new_state) and \
-           (datetime.datetime.now() - last_update_time).total_seconds() > training_time:
-            new_rule["state"] = new_state
-            new_all_rules = pd.concat([all_rules, new_rule]).drop_duplicates()
-            if not new_all_rules.equals(all_rules):
-                self.log(f"---Adding new rule for {actuator}")
-                with sql.connect(self.states_db) as con:
-                    new_rule.to_sql("rules_engine", con=con, if_exists="append")
-            else:
-                self.log(f"---Rule already exists for {actuator}")
-
     def load_models(self):
         actuators = tsh_config.actuators
         act_model_set = {}
@@ -199,21 +182,25 @@ class ModelExecutor(hass.Hass):
     def get_base_columns(self):
         return pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").columns
 
-    def get_new_feature_list(self, feature_list, device):
-        return sorted([feature for feature in feature_list if not feature.startswith(device)])
-
     def state_handler(self, entity, attribute, old, new, kwargs):
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
-        now = datetime.datetime.now()
 
         if entity in sensors:
             self.log(f"Handling state change for: {entity}")
             df_sen_states = self.create_rule_from_state(self.get_state())
 
+            # Anpassung: Nur bekannte Features verwenden
             for act, model in self.act_model_set.items():
                 if act in self.read_actuators():
+                    model_features = model.feature_names_in_
+                    df_sen_states = df_sen_states[[col for col in df_sen_states.columns if col in model_features]]
+
                     prediction = model.predict(df_sen_states)
                     self.log(f"Predicted {act} as {prediction}")
+
                     if self.verify_rules(act, df_sen_states, prediction, pd.DataFrame()):
-                        self.turn_on(act) if prediction == 1 else self.turn_off(act)
+                        if prediction == 1:
+                            self.turn_on(act)
+                        else:
+                            self.turn_off(act)

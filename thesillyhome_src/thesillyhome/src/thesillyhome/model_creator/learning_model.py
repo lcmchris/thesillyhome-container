@@ -14,7 +14,6 @@ from sklearn.svm import SVC
 from sklearn.metrics import precision_recall_curve, accuracy_score, precision_score, recall_score, auc
 from sklearn.preprocessing import MinMaxScaler
 
-# Local application imports
 import thesillyhome.model_creator.read_config_json as tsh_config
 
 def save_visual_tree(model, actuator, feature_vector):
@@ -42,7 +41,6 @@ def train_all_actuator_models():
 
     output_list = tsh_config.output_list.copy()
     act_list = list(set(df_act_states.columns) - set(output_list))
-
 
     model_types = {
         "DecisionTreeClassifier": {
@@ -101,12 +99,12 @@ def train_all_actuator_models():
         feature_list = sorted(list(set(act_list) - set(cur_act_list)))
         feature_vector = df_act[feature_list]
 
-        X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.3)
+        X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.1)
 
         base_weight = 0.4
         n_samples = len(X_train)
-        recent_weight = np.logspace(0.1, 0.6, n_samples, base=2)
-        scaler = MinMaxScaler(feature_range=(base_weight, 0.7))
+        recent_weight = np.logspace(0.4, 0.2, n_samples, base=2)
+        scaler = MinMaxScaler(feature_range=(base_weight, 0.6))
         sample_weight = scaler.fit_transform(recent_weight.reshape(-1, 1)).flatten()
 
         if "duplicate" in X_train.columns:
@@ -165,6 +163,8 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
         plt.xlabel("Recall")
         plt.ylabel("Precision")
         plt.legend()
+        plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png")
+        plt.close()  # Ensure plot resources are released
 
         y_predictions_best = to_labels(y_predictions_proba, thresholds[ix])
 
@@ -189,23 +189,10 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
 
         save_model(model, f"{model_directory}/{model_name}.pkl")
 
-    save_plots(actuator, y_train)
-
 def save_model(model, filepath):
     """Saves a model to a specified filepath."""
     with open(filepath, "wb") as file:
         pickle.dump(model, file)
-
-def save_plots(actuator, y_train):
-    """Saves precision-recall plots."""
-    plt.plot(
-        [0, 1],
-        [y_train.sum() / len(y_train), y_train.sum() / len(y_train)],
-        linestyle="--",
-        label="No Skill",
-    )
-    plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png")
-    plt.close()
 
 def save_metrics(metrics_matrix):
     """Saves the metrics to a file."""

@@ -3,140 +3,92 @@ import string
 import appdaemon.plugins.hass.hassapi as hass
 import pickle
 import pandas as pd
-import copy
-import os.path
+import os
 import logging
 import datetime
 import sqlite3 as sql
-import pytz
 import numpy as np
-import time
-import json
 from collections import deque
+from sklearn.exceptions import NotFittedError
 
 import thesillyhome.model_creator.read_config_json as tsh_config
 
-class ModelExecutor(hass.Hass):
+
+class ModelExecutorV2(hass.Hass):
     def initialize(self):
         self.handle = self.listen_state(self.state_handler)
         self.act_model_set = self.load_models()
         self.states_db = "/thesillyhome_src/appdaemon/apps/tsh.db"
-        self.last_states = self.get_state()
-        self.last_event_time = datetime.datetime.now()
-        self.automation_triggered = set()  # Track which entities were triggered by automation
-        self.switch_logs = {}  # Track recent switch times for each actuator
-        self.blocked_actuators = {}  # Track blocked actuators with unblocking times
+        self.metrics_file = "/thesillyhome_src/frontend/static/data/metrics_matrix.json"
+        self.switch_logs = {}
+        self.blocked_actuators = {}
         self.init_db()
-        self.log("Hello from TheSillyHome")
-        self.log("TheSillyHome Model Executor fully initialized!")
+        self.log_info("ModelExecutorV2 initialized.")
 
+    ### --- Logging functions --- ###
+    def log_info(self, message):
+        self.log(message, level="INFO")
+
+    def log_warning(self, message):
+        self.log(message, level="WARNING")
+
+    def log_error(self, message):
+        self.log(message, level="ERROR")
+
+    ### --- Database and model handling --- ###
+    def load_models(self):
+        models = {}
+        actuators = tsh_config.actuators
+        for act in actuators:
+            model_path = f"{tsh_config.data_dir}/model/{act}/best_model.pkl"
+            if os.path.isfile(model_path):
+                with open(model_path, "rb") as file:
+                    models[act] = pickle.load(file)
+            else:
+                self.log_warning(f"No model found for actuator: {act}")
+        return models
+
+    def init_db(self):
+        feature_list = self.get_base_columns()
+        rules_engine_df = pd.DataFrame(columns=feature_list)
+        rules_engine_df.loc[0] = 1
+        rules_engine_df["entity_id"] = "dummy"
+        rules_engine_df["state"] = 1
+
+        with sql.connect(self.states_db) as con:
+            try:
+                rules_engine_df.to_sql("rules_engine", con=con, if_exists="replace")
+                self.log_info("Initialized rules engine DB.")
+            except Exception as e:
+                self.log_warning(f"Could not initialize rules engine DB: {e}")
+
+    def get_base_columns(self):
+        return pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").columns
+
+    ### --- State handling and rule management --- ###
     def create_rule_from_state(self, current_states):
-        """
-        Erstellt eine neue Regel auf Basis der aktuellen Sensorzustände.
-        """
         feature_list = self.get_base_columns()
         rule_data = pd.DataFrame(columns=feature_list)
-        rule_data.loc[0] = 0  # Alle Werte initialisieren
+        rule_data.loc[0] = 0
 
-        # Zustände verarbeiten und in Regel einfügen
+        now = datetime.datetime.now()
         for entity, value in current_states.items():
             if f"{entity}_{value}" in rule_data.columns:
                 rule_data.at[0, f"{entity}_{value}"] = 1
-
-        # Zeitmerkmale hinzufügen
-        now = datetime.datetime.now()
         rule_data[f"hour_{now.hour}"] = 1
         rule_data[f"weekday_{now.weekday()}"] = 1
 
         return rule_data
 
-    def read_actuators(self):
-        enabled_actuators = set()
-        with open("/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r") as f:
-            metrics_data = json.load(f)
-        for metric in metrics_data:
-            if metric["model_enabled"]:
-                enabled_actuators.add(metric["actuator"])
-        self.log(f"Enabled Actuators: {enabled_actuators}")
-        return enabled_actuators
-
-    def init_db(self):
-        """
-        Initialize db with all potential hot encoded features.
-        """
-        with sql.connect(self.states_db) as con:
-            feature_list = self.get_base_columns()
-            feature_list = self.unverified_features(feature_list)
-            db_rules_engine = pd.DataFrame(columns=feature_list)
-            db_rules_engine.loc[0] = 1
-            db_rules_engine["entity_id"] = "dummy"
-            db_rules_engine["state"] = 1
-
-            self.log(f"Initialized rules engine DB", level="INFO")
-            try:
-                db_rules_engine.to_sql("rules_engine", con=con, if_exists="replace")
-            except:
-                self.log(f"DB already exists. Skipping", level="INFO")
-
-    def unverified_features(self, feature_list):
-        """
-        Filter out features that should not be verified.
-        """
-        feature_list = self.get_new_feature_list(feature_list, "hour_")
-        feature_list = self.get_new_feature_list(feature_list, "last_state_")
-        feature_list = self.get_new_feature_list(feature_list, "weekday_")
-        feature_list = self.get_new_feature_list(feature_list, "switch")
-        return feature_list
-
-    def log_automatic_action(self, act, action):
-        """
-        Logs an action that was triggered automatically.
-        Adds flipping detection to prevent excessive toggling.
-        """
-        self.track_switch(act)
-        if self.is_blocked(act):
-            self.log(f"Automatische Aktion blockiert: {act} wurde nicht {action} (zu viele Schaltvorgänge).", level="WARNING")
-            return
-        self.log(f"Automatisch: {act} wurde {action}.", level="INFO")
-
-    def log_manual_action(self, act, state):
-        """
-        Logs an action that was triggered manually.
-        If the actuator was automatically triggered in the last 60 seconds,
-        it blocks the actuator for 300 seconds.
-        """
-        now = datetime.datetime.now()
-
-        # Erstelle neue Regel basierend auf aktuellen Zuständen
+    def add_rule(self, actuator, state):
         current_states = self.get_state()
         new_rule = self.create_rule_from_state(current_states)
-        new_rule["entity_id"] = act
-        new_rule["state"] = 1 if state == "on" else 0
+        new_rule["entity_id"] = actuator
+        new_rule["state"] = state
 
-        # Regel speichern
         with sql.connect(self.states_db) as con:
             new_rule.to_sql("rules_engine", con=con, if_exists="append")
-
-        # Überprüfung auf automatische Auslösung in den letzten 90 Sekunden
-        if act in self.switch_logs:
-            recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 90]
-            if recent_switches:
-                self.blocked_actuators[act] = now + datetime.timedelta(seconds=1800)
-                self.log(f"Manuell: {act} wurde geändert auf {state}. Automatische Aktion erkannt. {act} für 1800 Sekunden blockiert.", level="WARNING")
-                return
-
-        self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
-        self.blocked_actuators[act] = now + datetime.timedelta(seconds=900)
-
-    def is_blocked(self, act):
-        if act in self.blocked_actuators:
-            unblock_time = self.blocked_actuators[act]
-            if datetime.datetime.now() < unblock_time:
-                self.log(f"{act} is currently blocked until {unblock_time}.", level="WARNING")
-                return True
-            else:
-                del self.blocked_actuators[act]  # Unblock the actuator
-        return False
+        self.log_info(f"Added new rule for {actuator}, state: {state}.")
 
     def track_switch(self, act):
         now = datetime.datetime.now()
@@ -147,60 +99,61 @@ class ModelExecutor(hass.Hass):
         recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 30]
         if len(recent_switches) > 6:
             self.blocked_actuators[act] = now + datetime.timedelta(seconds=1800)
-            self.log(f"{act} has been blocked for 1800 seconds due to excessive switching.", level="ERROR")
+            self.log_error(f"{act} blocked for 1800 seconds due to excessive switching.")
 
-    def verify_rules(self, act, rules_to_verify, prediction, all_rules):
-        self.log("Executing: verify_rules")
-        all_rules = all_rules[all_rules["entity_id"] == act]
-
-        if not all_rules.empty:
-            matching_rule = all_rules.merge(rules_to_verify)
-            if len(matching_rule) == 2:
-                self.log(f"--- These set of features are ambiguous. Do nothing.")
-                return False
-            elif (len(matching_rule) == 1) and (matching_rule["state"].values[0] != prediction):
-                self.log(f"--- This will not be executed as it is part of the excluded rules.")
-                return False
-        else:
-            self.log(f"--- No matching rules, empty DB for {act}")
-            return True
-
-        self.log("No matching rules found. Proceeding with prediction.")
-        return True
-
-    def load_models(self):
-        actuators = tsh_config.actuators
-        act_model_set = {}
-        for act in actuators:
-            if os.path.isfile(f"{tsh_config.data_dir}/model/{act}/best_model.pkl"):
-                with open(f"{tsh_config.data_dir}/model/{act}/best_model.pkl", "rb") as file:
-                    act_model_set[act] = pickle.load(file)
+    def is_blocked(self, act):
+        if act in self.blocked_actuators:
+            unblock_time = self.blocked_actuators[act]
+            if datetime.datetime.now() < unblock_time:
+                self.log_warning(f"{act} is currently blocked until {unblock_time}.")
+                return True
             else:
-                logging.info(f"No model for {act}")
-        return act_model_set
+                del self.blocked_actuators[act]
+        return False
 
-    def get_base_columns(self):
-        return pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").columns
+    ### --- Model execution and prediction --- ###
+    def predict_state(self, model, sensor_data):
+        try:
+            prediction = model.predict(sensor_data)
+            return prediction
+        except NotFittedError:
+            self.log_warning("Model not fitted. Skipping prediction.")
+            return None
+        except Exception as e:
+            self.log_error(f"Error during prediction: {e}")
+            return None
 
+    def handle_prediction(self, actuator, prediction, current_state):
+        if prediction == 1 and current_state != "on":
+            if not self.is_blocked(actuator):
+                self.log_info(f"Turning on {actuator}.")
+                self.turn_on(actuator)
+                self.track_switch(actuator)
+                self.add_rule(actuator, 1)
+        elif prediction == 0 and current_state != "off":
+            if not self.is_blocked(actuator):
+                self.log_info(f"Turning off {actuator}.")
+                self.turn_off(actuator)
+                self.track_switch(actuator)
+                self.add_rule(actuator, 0)
+
+    ### --- State handler --- ###
     def state_handler(self, entity, attribute, old, new, kwargs):
+        self.log_info(f"Handling state change for: {entity}")
         sensors = tsh_config.sensors
         actuators = tsh_config.actuators
 
         if entity in sensors:
-            self.log(f"Handling state change for: {entity}")
-            df_sen_states = self.create_rule_from_state(self.get_state())
+            sensor_data = self.create_rule_from_state(self.get_state())
 
-            # Anpassung: Nur bekannte Features verwenden
-            for act, model in self.act_model_set.items():
-                if act in self.read_actuators():
-                    model_features = model.feature_names_in_
-                    df_sen_states = df_sen_states[[col for col in df_sen_states.columns if col in model_features]]
+            for actuator, model in self.act_model_set.items():
+                if actuator in self.read_enabled_actuators():
+                    prediction = self.predict_state(model, sensor_data)
+                    if prediction is not None:
+                        current_state = self.get_state(entity_id=actuator)["state"]
+                        self.handle_prediction(actuator, prediction[0], current_state)
 
-                    prediction = model.predict(df_sen_states)
-                    self.log(f"Predicted {act} as {prediction}")
-
-                    if self.verify_rules(act, df_sen_states, prediction, pd.DataFrame()):
-                        if prediction == 1:
-                            self.turn_on(act)
-                        else:
-                            self.turn_off(act)
+    def read_enabled_actuators(self):
+        with open(self.metrics_file, "r") as f:
+            metrics_data = json.load(f)
+        return {metric["actuator"] for metric in metrics_data if metric["model_enabled"]}

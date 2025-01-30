@@ -88,7 +88,7 @@ class homedb:
             last_updated, \
             old_state_id \
         FROM ranked_states \
-        WHERE row_num <= 150 \
+        WHERE row_num <= 1200 \
         ORDER BY entity_id, last_updated DESC;"
 
         with self.mydb.connect() as con:

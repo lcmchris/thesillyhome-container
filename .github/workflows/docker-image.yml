@@ -34,7 +34,7 @@ jobs:
       - name: Define dynamic tag
         id: tag
         run: |
-          TAG=$(date +%Y%m%d)-$(echo $GITHUB_SHA | cut -c1-7)_v1.2.6
+          TAG=$(date +%Y%m%d)-$(echo $GITHUB_SHA | cut -c1-7)_v1.2.10
 
           echo "tag=$TAG" >> $GITHUB_ENV
 
@@ -45,19 +45,19 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --push \
-            -t lightningpicture/amd64-thesillyhome-dev:${{ env.tag }} \
-            -t lightningpicture/amd64-thesillyhome-dev:latest .
+            -t lcmchris1/amd64-thesillyhome-dev:${{ env.tag }} \
+            -t lcmchris1/amd64-thesillyhome-dev:latest .
 
           # Build and push for aarch64
           docker buildx build \
             --platform linux/arm64 \
             --push \
-            -t lightningpicture/aarch64-thesillyhome-dev:${{ env.tag }} \
-            -t lightningpicture/aarch64-thesillyhome-dev:latest .
+            -t lcmchris1/aarch64-thesillyhome-dev:${{ env.tag }} \
+            -t lcmchris1/aarch64-thesillyhome-dev:latest .
 
           # Build and push for armv7
           docker buildx build \
             --platform linux/arm/v7 \
             --push \
-            -t lightningpicture/armv7-thesillyhome-dev:${{ env.tag }} \
-            -t lightningpicture/armv7-thesillyhome-dev:latest .
+            -t lcmchris1/armv7-thesillyhome-dev:${{ env.tag }} \
+            -t lcmchris1/armv7-thesillyhome-dev:latest .

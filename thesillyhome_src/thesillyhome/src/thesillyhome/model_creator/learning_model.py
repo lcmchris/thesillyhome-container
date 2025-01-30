@@ -5,7 +5,6 @@ import logging
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import gc
 
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier, plot_tree
@@ -39,16 +38,11 @@ def optimization_function(precision, recall):
 def train_all_actuator_models():
     """Trains models for each actuator."""
     actuators = tsh_config.actuators
-
-    # Lade die Daten vollständig
-    logging.info("Loading data from act_states.pkl...")
-    df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl")
-
-    # Teile die Daten in Blöcke von 10.000 Zeilen, um Speicherprobleme zu vermeiden
-    data_chunks = [df_act_states[i:i + 10000] for i in range(0, len(df_act_states), 10000)]
+    df_act_states = pd.read_pickle(f"{tsh_config.data_dir}/parsed/act_states.pkl").reset_index(drop=True)
 
     output_list = tsh_config.output_list.copy()
     act_list = list(set(df_act_states.columns) - set(output_list))
+
 
     model_types = {
         "DecisionTreeClassifier": {
@@ -83,41 +77,54 @@ def train_all_actuator_models():
             },
         },
     }
-
+    
     metrics_matrix = []
 
-    for chunk in data_chunks:
-        for actuator in actuators:
-            logging.info(f"Training model for {actuator}")
-            df_act = chunk[chunk["entity_id"] == actuator]
+    for actuator in actuators:
+        logging.info(f"Training model for {actuator}")
+        df_act = df_act_states[df_act_states["entity_id"] == actuator]
 
-            if df_act.empty or len(df_act) < 30 or df_act["state"].nunique() == 1:
-                logging.info(f"Skipping {actuator} due to insufficient data.")
-                continue
+        if df_act.empty:
+            logging.info(f"No cases found for {actuator}")
+            continue
 
-            output_vector = df_act["state"]
-            cur_act_list = [feature for feature in act_list if feature.startswith(actuator)]
-            feature_list = sorted(list(set(act_list) - set(cur_act_list)))
-            feature_vector = df_act[feature_list]
+        if len(df_act) < 30:
+            logging.info("Samples less than 30. Skipping")
+            continue
 
-            X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.3)
+        if df_act["state"].nunique() == 1:
+            logging.info(f"All cases for {actuator} have the same state. Skipping")
+            continue
 
-            base_weight = 0.4
-            n_samples = len(X_train)
-            recent_weight = np.logspace(0.1, 0.6, n_samples, base=2)
-            scaler = MinMaxScaler(feature_range=(base_weight, 0.7))
-            sample_weight = scaler.fit_transform(recent_weight.reshape(-1, 1)).flatten()
+        output_vector = df_act["state"]
+        cur_act_list = [feature for feature in act_list if feature.startswith(actuator)]
+        feature_list = sorted(list(set(act_list) - set(cur_act_list)))
+        feature_vector = df_act[feature_list]
 
-            if "duplicate" in X_train.columns:
-                sample_weight *= X_train["duplicate"]
-                X_train = X_train.drop(columns="duplicate")
-                X_test = X_test.drop(columns="duplicate")
+        X_train, X_test, y_train, y_test = train_test_split(feature_vector, output_vector, test_size=0.3)
 
-            train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_test, sample_weight, metrics_matrix, feature_list)
+        base_weight = 0.4
+        n_samples = len(X_train)
+        recent_weight = np.logspace(0.1, 0.6, n_samples, base=2)
+        scaler = MinMaxScaler(feature_range=(base_weight, 0.7))
+        sample_weight = scaler.fit_transform(recent_weight.reshape(-1, 1)).flatten()
 
-            # Speicher freigeben
-            del X_train, X_test, y_train, y_test, feature_vector
-            gc.collect()
+        if "duplicate" in X_train.columns:
+            sample_weight *= X_train["duplicate"]
+            X_train = X_train.drop(columns="duplicate")
+            X_test = X_test.drop(columns="duplicate")
+
+        train_all_classifiers(
+            model_types,
+            actuator,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            sample_weight,
+            metrics_matrix,
+            feature_list,
+        )
 
     save_metrics(metrics_matrix)
     logging.info("Completed!")
@@ -158,8 +165,6 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
         plt.xlabel("Recall")
         plt.ylabel("Precision")
         plt.legend()
-        plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png")
-        plt.close()  # Schließe das Plot-Fenster, um Speicher freizugeben
 
         y_predictions_best = to_labels(y_predictions_proba, thresholds[ix])
 
@@ -184,14 +189,23 @@ def train_all_classifiers(model_types, actuator, X_train, X_test, y_train, y_tes
 
         save_model(model, f"{model_directory}/{model_name}.pkl")
 
-        # Speicher freigeben und Garbage Collector aufrufen
-        del model
-        gc.collect()
+    save_plots(actuator, y_train)
 
 def save_model(model, filepath):
     """Saves a model to a specified filepath."""
     with open(filepath, "wb") as file:
         pickle.dump(model, file)
+
+def save_plots(actuator, y_train):
+    """Saves precision-recall plots."""
+    plt.plot(
+        [0, 1],
+        [y_train.sum() / len(y_train), y_train.sum() / len(y_train)],
+        linestyle="--",
+        label="No Skill",
+    )
+    plt.savefig(f"/thesillyhome_src/frontend/static/data/{actuator}_precision_recall.png")
+    plt.close()
 
 def save_metrics(metrics_matrix):
     """Saves the metrics to a file."""
@@ -199,7 +213,9 @@ def save_metrics(metrics_matrix):
     df_metrics_matrix.to_pickle(f"/thesillyhome_src/data/model/metrics.pkl")
 
     try:
-        best_metrics_matrix = df_metrics_matrix.fillna(0).sort_values("best_optimizer", ascending=False).drop_duplicates(subset=["actuator"], keep="first")
+        best_metrics_matrix = df_metrics_matrix.fillna(0).sort_values(
+            "best_optimizer", ascending=False
+        ).drop_duplicates(subset=["actuator"], keep="first")
     except Exception as e:
         logging.warning(f"No metrics available: {e}")
         return

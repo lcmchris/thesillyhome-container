@@ -70,14 +70,58 @@ class ModelExecutor(hass.Hass):
 
     def log_manual_action(self, act, state):
         now = datetime.datetime.now()
+
+        # Erkennung und Blockierung bei manuellem Eingriff
         if act in self.switch_logs:
             recent_switches = [t for t in self.switch_logs[act] if (now - t).total_seconds() <= 90]
             if recent_switches:
                 self.blocked_actuators[act] = now + datetime.timedelta(seconds=1800)
                 self.log(f"Manuell: {act} wurde geändert auf {state}. Automatische Aktion in den letzten 90 Sekunden erkannt. {act} ist jetzt für 1800 Sekunden blockiert.", level="WARNING")
                 return
+
+        # Korrektur einer möglicherweise fehlerhaften Vorhersage
+        if act in self.act_model_set:
+            predicted_state = self.get_predicted_state(act)
+            if predicted_state is not None and predicted_state != state:
+                self.correct_missing_rule(act, state)
+
         self.log(f"Manuell: {act} wurde geändert auf {state}.", level="INFO")
         self.blocked_actuators[act] = now + datetime.timedelta(seconds=900)
+
+    def correct_missing_rule(self, actuator, correct_state):
+        """Fügt eine neue Regel ein, wenn eine vorhergesagte Regel falsch war."""
+        self.log(f"Fehlende Regel erkannt für {actuator}, tatsächlicher Zustand: {correct_state}. Neue Regel wird hinzugefügt.")
+        try:
+            new_rule = pd.DataFrame({
+                "entity_id": [actuator],
+                "state": [correct_state]
+            })
+
+            # Prüfen, ob die Spalte `timestamp` existiert und dynamisch erweitern, wenn nötig
+            with sql.connect(self.states_db) as con:
+                columns_query = con.execute("PRAGMA table_info(rules_engine)").fetchall()
+                column_names = [col[1] for col in columns_query]
+
+                if "timestamp" in column_names:
+                    new_rule["timestamp"] = datetime.datetime.now().isoformat()
+
+                new_rule.to_sql("rules_engine", con=con, if_exists="append", index=False)
+            self.log(f"Neue Regel für {actuator} erfolgreich hinzugefügt.")
+        except Exception as e:
+            self.log(f"Fehler beim Hinzufügen der Regel: {e}", level="ERROR")
+
+    def get_predicted_state(self, actuator):
+        """Holt die letzte vorhergesagte Modellvorhersage für einen Aktuator."""
+        try:
+            with open("/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r") as f:
+                metrics_data = json.load(f)
+
+            for metric in metrics_data:
+                if metric["actuator"] == actuator:
+                    return int(metric.get("last_prediction", -1))
+        except Exception as e:
+            self.log(f"Fehler beim Abrufen der Vorhersage für {actuator}: {e}", level="ERROR")
+        return None
 
     def is_blocked(self, act):
         if act in self.blocked_actuators:
@@ -130,31 +174,6 @@ class ModelExecutor(hass.Hass):
             self.log(f"---verify_rules took: {elapsed_time}")
             self.log(f"--- No matching rules, empty DB for {act}")
             return True
-
-    def update_metrics_file(self, updated_metrics):
-        metrics_path = "/thesillyhome_src/frontend/static/data/metrics_matrix.json"
-        try:
-            with open(metrics_path, "w") as f:
-                json.dump(updated_metrics, f, indent=4)
-            self.log(f"Metrics file updated successfully.")
-        except Exception as e:
-            self.log(f"Error updating metrics file: {e}", level="ERROR")
-
-    def collect_updated_metrics(self, actuator=None, prediction=None):
-        try:
-            with open("/thesillyhome_src/frontend/static/data/metrics_matrix.json", "r") as f:
-                metrics_data = json.load(f)
-
-            for metric in metrics_data:
-                if actuator and metric["actuator"] == actuator:
-                    metric["last_prediction"] = prediction
-                    metric["last_updated"] = datetime.datetime.now().isoformat()
-
-            return metrics_data
-
-        except Exception as e:
-            self.log(f"Error collecting metrics: {e}", level="ERROR")
-            return []
 
     def add_rules(self, training_time: datetime.datetime, actuator: string, new_state: int, new_rule: pd.DataFrame, all_rules: pd.DataFrame):
         self.log("Executing: add_rules")
